@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: bizpermit-backend
+    env: python
+    buildCommand: "pip install -r backend/requirements.txt && python backend/manage.py collectstatic --noinput"
+    startCommand: "gunicorn --chdir backend bizpermit_core.wsgi:application --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DJANGO_SETTINGS_MODULE
+        value: bizpermit_core.settings
+      - key: DEBUG
+        value: "False"
+      - key: USE_MOCK_DB_IF_UNAVAILABLE
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "localhost,127.0.0.1,.onrender.com"
