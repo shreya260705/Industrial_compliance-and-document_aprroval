@@ -1,1 +1,1 @@
-web: gunicorn bizpermit_core.wsgi:application --bind 0.0.0.0:$PORT
+web: python manage.py seed_demo_data && gunicorn bizpermit_core.wsgi:application --bind 0.0.0.0:$PORT
