@@ -882,16 +882,6 @@ class GrievanceRepository(BaseRepository):
             doc.update(extra)
             updated = BaseRepository.serialize_doc(doc)
 
-        # Notify assigned officer
-        self.notification_repo.create_notification(
-            recipient_user_id=target_oid,
-            notification_type="GRIEVANCE_ASSIGNMENT",
-            title=f"Grievance Assigned: {doc.get('grievance_reference')}",
-            message=f"You have been assigned to handle grievance '{doc.get('subject')}'.",
-            reference_id=doc.get("grievance_reference"),
-            session=session
-        )
-
         return updated
 
     def reassign_officer_admin(

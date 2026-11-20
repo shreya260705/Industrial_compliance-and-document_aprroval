@@ -530,20 +530,46 @@ class SchemeApplicationAttestView(APIView):
         serialized = BaseRepository.serialize_doc(attested_app)
 
         from apps.common.workflow_engine import WorkflowEngine
+        assigned_officer_id = attested_app.get("assigned_officer_id")
+        if assigned_officer_id:
+            recipient_ids = [assigned_officer_id]
+        else:
+            eligible_officers = WorkflowEngine.find_eligible_officers(
+                attested_app.get("department_code"),
+                attested_app.get("state_code")
+            )
+            recipient_ids = [officer["_id"] for officer in eligible_officers]
+
+        applicant_name = getattr(request.user, "full_name", None) or "A business owner"
+        application_reference = attested_app.get("application_reference")
+        scheme_code = attested_app.get("scheme_code")
+        notification_content = {
+            str(officer_id): {
+                "title": f"Scheme dossier ready for review: {application_reference}",
+                "message": (
+                    f"{applicant_name} submitted and self-attested scheme dossier "
+                    f"{application_reference} for {scheme_code}. Review it in your scheme queue."
+                )
+            }
+            for officer_id in recipient_ids
+        }
         WorkflowEngine.publish_event(
             event_type="SCHEME_APPLICATION_SUBMITTED",
             actor_user_id=request.user.id,
             actor_role=user_role,
             target_collection="scheme_applications",
             target_id=attested_app["_id"],
-            title=f"Scheme Application Submitted: {attested_app.get('scheme_code')}",
-            message=f"Application {attested_app.get('application_reference')} submitted and self-attested for {attested_app.get('scheme_code')}.",
+            title=f"Scheme Application Submitted: {scheme_code}",
+            message=f"Scheme dossier {application_reference} was submitted and self-attested for {scheme_code}.",
             payload={
-                "application_reference": attested_app.get("application_reference"),
-                "scheme_code": attested_app.get("scheme_code")
+                "application_reference": application_reference,
+                "scheme_code": scheme_code,
+                "department": attested_app.get("department_code"),
+                "state": attested_app.get("state_code")
             },
-            recipient_user_ids=[request.user.id] + ([attested_app["assigned_officer_id"]] if attested_app.get("assigned_officer_id") else []),
-            reference_id=attested_app.get("application_reference")
+            recipient_user_ids=recipient_ids,
+            reference_id=application_reference,
+            notification_content_by_user=notification_content
         )
 
         return api_success_response(

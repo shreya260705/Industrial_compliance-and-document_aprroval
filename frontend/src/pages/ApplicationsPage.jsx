@@ -605,13 +605,23 @@ export const ApplicationsPage = () => {
                 </div>
 
                 {/* Assigned Scrutiny Officer Badge */}
-                {app.assigned_officer_name && (
+                {app.status !== 'DRAFT' && (
                   <div className="flex items-center gap-1.5 text-xs text-brand-deep-sage bg-brand-pale-sage/60 px-2.5 py-1 rounded-md border border-brand-deep-sage/20 w-fit">
-                    <UserCheck className="h-3.5 w-3.5 text-brand-deep-sage shrink-0" />
-                    <span>Assigned Scrutiny Officer:</span>
-                    <strong className="text-stone-900">{app.assigned_officer_name}</strong>
-                    {app.assigned_officer_email && (
-                      <span className="text-[10px] text-stone-500 font-mono">({app.assigned_officer_email})</span>
+                    {app.assigned_officer_name ? (
+                      <>
+                        <UserCheck className="h-3.5 w-3.5 text-brand-deep-sage shrink-0" />
+                        <span>Assigned Scrutiny Officer:</span>
+                        <strong className="text-stone-900">{app.assigned_officer_name}</strong>
+                        {app.assigned_officer_email && (
+                          <span className="text-[10px] text-stone-500 font-mono">({app.assigned_officer_email})</span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span>Scrutiny Officer:</span>
+                        <strong className="text-stone-900">Pending assignment</strong>
+                      </>
                     )}
                   </div>
                 )}
@@ -1178,24 +1188,40 @@ export const ApplicationsPage = () => {
               </div>
 
               {/* Assigned Scrutiny Officer Details */}
-              {selectedApp.assigned_officer_name && (
+              {selectedApp.status !== 'DRAFT' && (
                 <div className="p-3.5 bg-brand-pale-sage/50 rounded-lg border border-brand-deep-sage/30 text-xs text-brand-deep-sage flex items-start gap-3">
-                  <UserCheck className="h-5 w-5 text-brand-deep-sage shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <div className="font-bold text-stone-900 text-sm">
-                      Assigned Scrutiny Officer: {selectedApp.assigned_officer_name}
-                    </div>
-                    <div className="text-stone-600 flex flex-wrap gap-x-4 gap-y-1">
-                      <span>Official Email: <strong className="font-mono text-stone-800">{selectedApp.assigned_officer_email}</strong></span>
-                      <span>Department: <strong>{selectedApp.department_code}</strong></span>
-                      {selectedApp.assigned_officer_badge && <span>Badge: #{selectedApp.assigned_officer_badge}</span>}
-                    </div>
-                    {selectedApp.assigned_at && (
-                      <div className="text-[10px] text-stone-500 font-mono">
-                        Assigned on {new Date(selectedApp.assigned_at).toLocaleString()}
+                  {selectedApp.assigned_officer_name ? (
+                    <>
+                      <UserCheck className="h-5 w-5 text-brand-deep-sage shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <div className="font-bold text-stone-900 text-sm">
+                          Assigned Scrutiny Officer: {selectedApp.assigned_officer_name}
+                        </div>
+                        <div className="text-stone-600 flex flex-wrap gap-x-4 gap-y-1">
+                          <span>Official Email: <strong className="font-mono text-stone-800">{selectedApp.assigned_officer_email}</strong></span>
+                          <span>Department: <strong>{selectedApp.department_code}</strong></span>
+                          {selectedApp.assigned_officer_badge && <span>Badge: #{selectedApp.assigned_officer_badge}</span>}
+                        </div>
+                        {selectedApp.assigned_at && (
+                          <div className="text-[10px] text-stone-500 font-mono">
+                            Assigned on {new Date(selectedApp.assigned_at).toLocaleString()}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    </>
+                  ) : (
+                    <>
+                      <Clock className="h-5 w-5 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <div className="font-bold text-stone-900 text-sm">
+                          Scrutiny Officer: Pending assignment
+                        </div>
+                        <div className="text-stone-600">
+                          Your application is in the department queue and will be assigned to an eligible officer.
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

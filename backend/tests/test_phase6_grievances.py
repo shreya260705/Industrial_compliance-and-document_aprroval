@@ -932,19 +932,34 @@ def test_26_notifications_generated_correctly(grievances_setup):
     client_a = grievances_setup["client_a"]
     user_a = grievances_setup["user_a"]
     biz = grievances_setup["biz_a"]
+    officer_gj = grievances_setup["officer_gj_ind"]
+    officer_mh = grievances_setup["officer_mh_ind"]
 
     initial_count = notif_repo.count_by_user(user_a["_id"])
+    officer_gj_initial_count = notif_repo.count_by_user(officer_gj["_id"])
+    officer_mh_initial_count = notif_repo.count_by_user(officer_mh["_id"])
 
-    # Submitting grievance creates notification for applicant
+    # Applicant receives confirmation; only the matching Gujarat department officer is notified.
     resp = client_a.post("/api/v1/grievances/", {
         "business_id": str(biz["_id"]),
         "subject": "Test Notification Generation",
         "description": "Testing notification creation upon submission."
     }, format="json")
     assert resp.status_code == 201
+    grievance = resp.json()["data"]["grievance"]
 
     new_count = notif_repo.count_by_user(user_a["_id"])
     assert new_count == initial_count + 1
+    assert notif_repo.count_by_user(officer_gj["_id"]) == officer_gj_initial_count + 1
+    assert notif_repo.count_by_user(officer_mh["_id"]) == officer_mh_initial_count
+    officer_notification = next(
+        notification for notification in notif_repo.find_by_user(officer_gj["_id"])
+        if notification["reference_id"] == grievance["grievance_reference"]
+    )
+    assert officer_notification["title"] == (
+        f"New grievance for {grievance['department_code']}: {grievance['grievance_reference']}"
+    )
+    assert "Rajiv Mehta" in officer_notification["message"]
 
 
 # =============================================================================

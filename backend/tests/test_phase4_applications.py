@@ -376,7 +376,8 @@ def test_04_application_submission_and_immutability(test_setup):
     # Submit with confirmation
     sub_res = client_a.post(f"/api/v1/applications/{app_id}/submit", {"confirmation": True}, format="json")
     assert sub_res.status_code == 200
-    assert sub_res.json()["data"]["status"] == "SUBMITTED"
+    assert sub_res.json()["data"]["status"] == "UNDER_SCRUTINY"
+    assert sub_res.json()["data"]["assigned_officer_name"] == data["officer_gj_dish"]["full_name"]
     assert sub_res.json()["data"]["submitted_at"] is not None
     from apps.notifications.repository import NotificationRepository
     notifications = NotificationRepository()
@@ -442,7 +443,6 @@ def test_06_application_cross_user_idor_protection(test_setup):
 def test_07_officer_jurisdiction_scoping(test_setup):
     data = test_setup
     client_a = get_auth_client(data["user_a"]["email"])
-    client_gj = get_auth_client(data["officer_gj"]["email"])
     client_mh = get_auth_client(data["officer_mh"]["email"])
 
     # Create & submit Gujarat application for CTE Red
@@ -460,16 +460,20 @@ def test_07_officer_jurisdiction_scoping(test_setup):
     }, format="json")
     assert create_res.status_code in (200, 201)
     app_id = create_res.json()["data"]["id"]
-    client_a.post(f"/api/v1/applications/{app_id}/submit", {"confirmation": True}, format="json")
+    submit_res = client_a.post(f"/api/v1/applications/{app_id}/submit", {"confirmation": True}, format="json")
+    assert submit_res.status_code == 200
+    assigned_officer = UserRepository().find_by_id(submit_res.json()["data"]["assigned_officer_id"])
+    assert assigned_officer["officer_profile"]["department_code"] == "GPCB-ENV"
+    assert assigned_officer["officer_profile"]["jurisdiction_code"] == "IN-GJ"
+    assigned_client = get_auth_client(assigned_officer)
 
-    # Gujarat Officer can see application in queue
-    gj_queue = client_gj.get("/api/v1/officer/applications")
+    # The assigned Gujarat officer can see the application in their queue.
+    gj_queue = assigned_client.get("/api/v1/officer/applications")
     assert gj_queue.status_code == 200
     app_ids = [a["id"] for a in gj_queue.json()["data"]]
     assert app_id in app_ids
 
-    # Gujarat Officer can read application details
-    gj_detail = client_gj.get(f"/api/v1/officer/applications/{app_id}")
+    gj_detail = assigned_client.get(f"/api/v1/officer/applications/{app_id}")
     assert gj_detail.status_code == 200
     assert gj_detail.json()["data"]["approval_code"] == "GPCB-CTE-IND"
 
@@ -500,15 +504,7 @@ def test_08_full_officer_scrutiny_and_clarification_loop(test_setup):
     sub = client_a.post(f"/api/v1/applications/{app_id}/submit", {"confirmation": True}, format="json")
     assert sub.status_code == 200
 
-    # 2. Officer takes up for scrutiny: SUBMITTED -> UNDER_SCRUTINY
-    act1 = client_gj.post(f"/api/v1/officer/applications/{app_id}/action", {
-        "action": "MARK_SCRUTINY",
-        "remarks": "Application accepted for technical review by GPCB Regional Officer."
-    }, format="json")
-    assert act1.status_code == 200
-    assert act1.json()["data"]["status"] == "UNDER_SCRUTINY"
-
-    # 3. Officer raises clarification: UNDER_SCRUTINY -> CLARIFICATION
+    # 2. The application is auto-assigned on submission; the assigned officer raises a clarification.
     act2 = client_gj.post(f"/api/v1/officer/applications/{app_id}/action", {
         "action": "REQUEST_CLARIFICATION",
         "remarks": "Additional environmental management plan required.",
@@ -555,6 +551,10 @@ def test_09_notifications_lifecycle(test_setup):
 def test_10_application_metrics_can_be_scoped_to_business(test_setup):
     data = test_setup
     client_a = get_auth_client(data["user_a"]["email"])
+    ApplicationRepository().collection.delete_many({
+        "location_id": data["loc_a"]["_id"],
+        "approval_code": "GPCB-CTE-IND"
+    })
 
     create_res = client_a.post("/api/v1/applications", {
         "business_id": str(data["biz_a"]["_id"]),

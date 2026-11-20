@@ -127,17 +127,38 @@ class GrievanceListCreateView(APIView):
             )
             from apps.common.workflow_engine import WorkflowEngine
             grv_id = grievance.get("_id") or grievance.get("id")
+            department_code = grievance.get("department_code")
+            state_code = grievance.get("state_code")
+            eligible_officers = (
+                WorkflowEngine.find_eligible_officers(department_code, state_code)
+                if grievance.get("track") == "INTERNAL"
+                else []
+            )
+            officer_ids = [officer["_id"] for officer in eligible_officers]
+            officer_name = getattr(request.user, "full_name", None) or "A business owner"
+            reference = grievance.get("grievance_reference")
+            notification_content = {
+                str(officer["_id"]): {
+                    "title": f"New grievance for {department_code}: {reference}",
+                    "message": (
+                        f"{officer_name} submitted grievance '{grievance.get('subject')}' "
+                        f"against {department_code} in {state_code}. Review it in your grievance queue."
+                    )
+                }
+                for officer in eligible_officers
+            }
             WorkflowEngine.publish_event(
                 event_type="GRIEVANCE_SUBMITTED",
                 actor_user_id=request.user.id,
                 actor_role=getattr(request.user, "role", "BUSINESS_OWNER"),
                 target_collection="grievances",
                 target_id=grv_id,
-                title=f"Grievance Lodged: {grievance.get('grievance_reference')}",
-                message=f"Grievance {grievance.get('grievance_reference')} has been lodged against {grievance.get('department_code')}.",
-                payload={"reference": grievance.get("grievance_reference"), "department": grievance.get("department_code")},
-                recipient_user_ids=[request.user.id],
-                reference_id=grievance.get("grievance_reference")
+                title=f"Grievance Submitted: {reference}",
+                message=f"Grievance {reference} was submitted against {department_code}.",
+                payload={"reference": reference, "department": department_code, "state": state_code},
+                recipient_user_ids=officer_ids,
+                reference_id=reference,
+                notification_content_by_user=notification_content
             )
 
             return api_success_response(

@@ -482,17 +482,6 @@ class SchemeReviewRepository(BaseRepository):
             session=session
         )
 
-        # Send notification to assigned officer
-        self.notification_repo.create_notification(
-            recipient_user_id=officer_oid,
-            notification_type="SCHEME_REVIEW_ASSIGNED",
-            title="Scheme Dossier Assigned for Scrutiny",
-            message=f"Dossier {dossier.get('application_reference')} for {dossier.get('scheme_code')} has been assigned to you.",
-            reference_id=str(dossier["_id"]),
-            metadata={"scheme_code": dossier.get("scheme_code")},
-            session=session
-        )
-
         return self.find_by_id(dossier_id)
 
     def start_review(

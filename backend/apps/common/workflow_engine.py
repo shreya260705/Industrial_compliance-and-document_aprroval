@@ -4,7 +4,7 @@ Persists workflow events to MongoDB 'platform_events', dispatches targeted dedup
 and enforces authoritative task assignment, reassignment, and state consistency across role portals.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
 from bson import ObjectId
 from apps.database.connection import get_db
@@ -100,6 +100,79 @@ class WorkflowEngine:
         return False
 
     @classmethod
+    def find_eligible_officers(
+        cls,
+        department_code: Optional[str],
+        state_code: Optional[str]
+    ) -> List[Dict[str, Any]]:
+        if not department_code:
+            return []
+
+        target_dept = str(department_code).strip().upper()
+        target_state = str(state_code or "").strip().upper()
+        allowed_actions = {
+            "REVIEW", "RECOMMEND", "SCRUTINY", "APPROVE",
+            "RECORD_OBSERVATION", "ALL", "ASSIGN"
+        }
+        officers = get_db().users.find({
+            "role": "DEPARTMENT_OFFICER",
+            "is_active": {"$ne": False}
+        })
+
+        eligible = []
+        for officer in officers:
+            profile = officer.get("officer_profile") or {}
+            officer_dept = profile.get("department_code") or officer.get("department_code")
+            officer_state = profile.get("jurisdiction_code") or officer.get("jurisdiction_code")
+            if not officer_dept or not cls._is_dept_match(officer_dept, target_dept):
+                continue
+
+            officer_state = str(officer_state or "").strip().upper()
+            if target_state:
+                if target_state == "IN-ALL":
+                    if officer_state != "IN-ALL":
+                        continue
+                elif officer_state not in (target_state, "IN-ALL"):
+                    continue
+
+            permitted_actions = {
+                str(action).strip().upper()
+                for action in (profile.get("permitted_workflow_actions") or [])
+            }
+            if permitted_actions and not permitted_actions.intersection(allowed_actions):
+                continue
+
+            eligible.append(officer)
+
+        return eligible
+
+    @classmethod
+    def select_least_loaded_officer(
+        cls,
+        department_code: Optional[str],
+        state_code: Optional[str]
+    ) -> Optional[Dict[str, Any]]:
+        officers = cls.find_eligible_officers(department_code, state_code)
+        if not officers:
+            return None
+
+        applications = get_db().applications
+
+        def workload(officer):
+            assigned_count = applications.count_documents({
+                "assigned_officer_id": officer["_id"],
+                "status": {"$nin": ["DRAFT", "APPROVED", "REJECTED"]},
+                "is_active": {"$ne": False}
+            })
+            return (
+                assigned_count,
+                str(officer.get("full_name") or "").casefold(),
+                str(officer["_id"])
+            )
+
+        return min(officers, key=workload)
+
+    @classmethod
     def publish_event(
         cls,
         event_type: str,
@@ -112,7 +185,8 @@ class WorkflowEngine:
         payload: Optional[Dict[str, Any]] = None,
         recipient_user_ids: Optional[List[Union[str, ObjectId]]] = None,
         reference_id: Optional[str] = None,
-        session=None
+        session=None,
+        notification_content_by_user: Optional[Dict[str, Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         """
         1. Persists event in platform_events.
@@ -159,19 +233,25 @@ class WorkflowEngine:
                     # Do not notify self of own action
                     continue
 
+                recipient_content = (notification_content_by_user or {}).get(str(r_oid), {})
+                notification_title = recipient_content.get("title", title)
+                notification_message = recipient_content.get("message", message)
                 # Deduplication check: prevent identical unread notification within 5 minutes
                 existing_dup = db.notifications.find_one({
                     "recipient_user_id": r_oid,
                     "notification_type": event_type.strip().upper(),
                     "reference_id": ref_str,
-                    "is_read": False
+                    "is_read": False,
+                    "title": notification_title,
+                    "message": notification_message,
+                    "created_at": {"$gte": datetime.now(timezone.utc) - timedelta(minutes=5)}
                 })
                 if not existing_dup:
                     notif_repo.create_notification(
                         recipient_user_id=r_oid,
                         notification_type=event_type,
-                        title=title,
-                        message=message,
+                        title=notification_title,
+                        message=notification_message,
                         reference_id=ref_str,
                         metadata=payload or {},
                         session=session
@@ -185,7 +265,7 @@ class WorkflowEngine:
         target_collection: str,
         target_id: Union[str, ObjectId],
         officer_user_id: Union[str, ObjectId],
-        assigned_by_user_id: Union[str, ObjectId],
+        assigned_by_user_id: Optional[Union[str, ObjectId]],
         assigned_by_role: str,
         remarks: str = "",
         session=None
@@ -199,7 +279,7 @@ class WorkflowEngine:
         db = get_db()
         target_oid = BaseRepository.to_object_id(target_id)
         officer_oid = BaseRepository.to_object_id(officer_user_id)
-        assigner_oid = BaseRepository.to_object_id(assigned_by_user_id)
+        assigner_oid = BaseRepository.to_object_id(assigned_by_user_id) if assigned_by_user_id else None
 
         # 1. Fetch and validate officer
         officer = db.users.find_one({"_id": officer_oid, "role": "DEPARTMENT_OFFICER"})
@@ -331,11 +411,65 @@ class WorkflowEngine:
                 if biz:
                     owner_id = biz.get("owner_user_id") or biz.get("user_id")
 
+        owner_oid = BaseRepository.to_object_id(owner_id) if owner_id else None
+        previous_officer_oid = BaseRepository.to_object_id(prev_officer_id) if prev_officer_id else None
         recipients = [officer_oid]
-        if owner_id:
-            recipients.append(owner_id)
-        if prev_officer_id and prev_officer_id != officer_oid:
-            recipients.append(prev_officer_id)
+        if owner_oid:
+            recipients.append(owner_oid)
+        if previous_officer_oid and previous_officer_oid != officer_oid:
+            recipients.append(previous_officer_oid)
+
+        item_type, item_description = {
+            "applications": (
+                "application",
+                target_doc.get("approval_title") or target_doc.get("approval_code")
+            ),
+            "scheme_applications": (
+                "scheme dossier",
+                target_doc.get("scheme_code")
+            ),
+            "grievances": (
+                "grievance",
+                target_doc.get("subject")
+            ),
+            "business_documents": (
+                "Vault document",
+                target_doc.get("document_name")
+            )
+        }.get(coll_name, ("review item", None))
+        item_description = f" ({item_description})" if item_description else ""
+        owner = db.users.find_one({"_id": owner_oid}) if owner_oid else None
+        owner_name = owner.get("full_name") if owner else "the applicant"
+        target_department = off_dept or target_dept or "the responsible department"
+        target_jurisdiction = off_state or target_state
+
+        notification_content = {
+            str(officer_oid): {
+                "title": f"New scrutiny assignment: {ref_ident}",
+                "message": (
+                    f"You are responsible for reviewing {item_type} {ref_ident}{item_description}, "
+                    f"submitted by {owner_name}. Department: {target_department}."
+                    + (f" Jurisdiction: {target_jurisdiction}." if target_jurisdiction else "")
+                )
+            }
+        }
+        if owner_oid:
+            notification_content[str(owner_oid)] = {
+                "title": f"Officer assigned to {ref_ident}",
+                "message": (
+                    f"{officer.get('full_name')} has been assigned to review your "
+                    f"{item_type} {ref_ident}{item_description}. Department: {target_department}."
+                    + (f" Jurisdiction: {target_jurisdiction}." if target_jurisdiction else "")
+                )
+            }
+        if previous_officer_oid and previous_officer_oid != officer_oid:
+            notification_content[str(previous_officer_oid)] = {
+                "title": f"Assignment reassigned: {ref_ident}",
+                "message": (
+                    f"{item_type.capitalize()} {ref_ident} has been reassigned to "
+                    f"{officer.get('full_name')}; it is no longer assigned to you."
+                )
+            }
 
         cls.publish_event(
             event_type=f"{coll_name.upper()}_OFFICER_ASSIGNED",
@@ -353,7 +487,8 @@ class WorkflowEngine:
             },
             recipient_user_ids=recipients,
             reference_id=ref_ident,
-            session=session
+            session=session,
+            notification_content_by_user=notification_content
         )
 
         return coll.find_one({"_id": target_oid})

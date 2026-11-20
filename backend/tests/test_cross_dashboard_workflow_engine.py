@@ -17,6 +17,7 @@ Validates the complete 12-scenario lifecycle across Business Owner, Department O
 
 import io
 import pytest
+from datetime import datetime, timezone
 from django.core.management import call_command
 from rest_framework.test import APIClient
 from apps.authentication.password import hash_password
@@ -169,7 +170,7 @@ shared_state = {}
 
 
 def test_scenario_01_owner_submits_application_and_uploads_document(workflow_setup):
-    """Scenario 1: Owner creates draft, uploads document, attaches it, and submits application."""
+    """Scenario 1: Owner submits an application and the least-loaded eligible officer is assigned."""
     owner_client = workflow_setup["owner_client"]
     biz = workflow_setup["biz"]
     loc = workflow_setup["loc"]
@@ -211,46 +212,80 @@ def test_scenario_01_owner_submits_application_and_uploads_document(workflow_set
     # Submit application
     sub_res = owner_client.post(f"/api/v1/applications/{shared_state['app_id']}/submit", {"confirmation": True}, format="json")
     assert sub_res.status_code == 200
-    assert sub_res.json()["data"]["status"] == "SUBMITTED"
+    submitted = sub_res.json()["data"]
+    assert submitted["status"] == "UNDER_SCRUTINY"
+    assert submitted["assigned_officer_name"] == workflow_setup["officer_1"]["full_name"]
+    assert submitted["assigned_officer_id"] == str(workflow_setup["officer_1"]["_id"])
     shared_state["app_number"] = sub_res.json()["data"]["application_number"]
+
+    from apps.notifications.repository import NotificationRepository
+    notifications = NotificationRepository()
+    owner_notifications = notifications.find_by_user(workflow_setup["owner_user"]["_id"])
+    officer_notifications = notifications.find_by_user(workflow_setup["officer_1"]["_id"])
+    owner_assignment = next(n for n in owner_notifications if n["reference_id"] == shared_state["app_number"])
+    officer_assignment = next(n for n in officer_notifications if n["reference_id"] == shared_state["app_number"])
+    assert owner_assignment["title"] == f"Officer assigned to {shared_state['app_number']}"
+    assert "Arjun Mehta" in owner_assignment["message"]
+    assert officer_assignment["title"] == f"New scrutiny assignment: {shared_state['app_number']}"
+    assert "Vikramaditya Singhania" in officer_assignment["message"]
 
 
 def test_scenario_02_admin_assigns_specific_officer(workflow_setup):
-    """Scenario 2: Admin assigns specific eligible officer to the submitted application."""
+    """Scenario 2: Admin can reassign an automatically assigned application."""
     admin_client = workflow_setup["admin_client"]
-    officer_1 = workflow_setup["officer_1"]
+    officer_2 = workflow_setup["officer_2"]
 
     assign_res = admin_client.post(f"/api/v1/applications/{shared_state['app_id']}/assign", {
-        "officer_user_id": str(officer_1["_id"]),
-        "remarks": "Assigned to Arjun Mehta for statutory environmental scrutiny."
+        "officer_user_id": str(officer_2["_id"]),
+        "remarks": "Reassigned to Bhavik Shah for statutory environmental scrutiny."
     }, format="json")
     assert assign_res.status_code == 200
     assigned_data = assign_res.json()["data"]
-    assert str(assigned_data["assigned_officer_id"]) == str(officer_1["_id"])
-    assert assigned_data["assigned_officer_name"] == "Arjun Mehta"
-    assert assigned_data["assigned_officer_email"] == "officer.primary@gpcb.gov.in"
+    assert str(assigned_data["assigned_officer_id"]) == str(officer_2["_id"])
+    assert assigned_data["assigned_officer_name"] == "Bhavik Shah"
+    assert assigned_data["assigned_officer_email"] == "officer.secondary@gpcb.gov.in"
     assert assigned_data["status"] == "UNDER_SCRUTINY"
+
+    from apps.notifications.repository import NotificationRepository
+    notifications = NotificationRepository()
+    owner_assignment = next(
+        notification for notification in notifications.find_by_user(workflow_setup["owner_user"]["_id"])
+        if notification["reference_id"] == shared_state["app_number"]
+        and "Bhavik Shah" in notification["message"]
+    )
+    officer_assignment = next(
+        notification for notification in notifications.find_by_user(officer_2["_id"])
+        if notification["reference_id"] == shared_state["app_number"]
+        and notification["title"] == f"New scrutiny assignment: {shared_state['app_number']}"
+    )
+    previous_officer_notice = next(
+        notification for notification in notifications.find_by_user(workflow_setup["officer_1"]["_id"])
+        if notification["reference_id"] == shared_state["app_number"]
+        and notification["title"] == f"Assignment reassigned: {shared_state['app_number']}"
+    )
+    assert "You are responsible" in officer_assignment["message"]
+    assert "no longer assigned to you" in previous_officer_notice["message"]
 
 
 def test_scenario_03_owner_sees_officers_actual_identity(workflow_setup):
     """Scenario 3: Owner fetches application and sees officer's real name, email, and department."""
     owner_client = workflow_setup["owner_client"]
-    officer_1 = workflow_setup["officer_1"]
+    officer_2 = workflow_setup["officer_2"]
 
     detail_res = owner_client.get(f"/api/v1/applications/{shared_state['app_id']}")
     assert detail_res.status_code == 200
     app_doc = detail_res.json()["data"]
-    assert app_doc["assigned_officer_name"] == officer_1["full_name"]
-    assert app_doc["assigned_officer_email"] == officer_1["email"]
+    assert app_doc["assigned_officer_name"] == officer_2["full_name"]
+    assert app_doc["assigned_officer_email"] == officer_2["email"]
     assert app_doc["assigned_officer_department"] == "GPCB-ENV"
-    assert app_doc["assigned_officer_badge"] == "GJ-ENV-1001"
+    assert app_doc["assigned_officer_badge"] == "GJ-ENV-2002"
     assert len(app_doc.get("assignment_history", [])) >= 1
 
 
 def test_scenario_04_assigned_officer_sees_task_in_queue(workflow_setup):
     """Scenario 4: Assigned officer sees the task in their scrutiny queue."""
-    off1_client = workflow_setup["off1_client"]
-    queue_res = off1_client.get("/api/v1/officer/applications")
+    off2_client = workflow_setup["off2_client"]
+    queue_res = off2_client.get("/api/v1/officer/applications")
     assert queue_res.status_code == 200
     apps = queue_res.json()["data"]
     found = [a for a in apps if a["id"] == shared_state["app_id"]]
@@ -260,15 +295,15 @@ def test_scenario_04_assigned_officer_sees_task_in_queue(workflow_setup):
 
 def test_scenario_05_another_officer_cannot_access_task(workflow_setup):
     """Scenario 5: Another officer in the same department cannot access the task or execute scrutiny."""
-    off2_client = workflow_setup["off2_client"]
+    off1_client = workflow_setup["off1_client"]
 
     # Direct detail access forbidden
-    detail_res = off2_client.get(f"/api/v1/officer/applications/{shared_state['app_id']}")
+    detail_res = off1_client.get(f"/api/v1/officer/applications/{shared_state['app_id']}")
     assert detail_res.status_code == 403
     assert "assigned to another officer" in detail_res.json()["error"]["message"]
 
     # Scrutiny action forbidden
-    action_res = off2_client.post(f"/api/v1/officer/applications/{shared_state['app_id']}/action", {
+    action_res = off1_client.post(f"/api/v1/officer/applications/{shared_state['app_id']}/action", {
         "action": "MARK_SCRUTINY",
         "remarks": "Unauthorized scrutiny attempt"
     }, format="json")
@@ -278,16 +313,16 @@ def test_scenario_05_another_officer_cannot_access_task(workflow_setup):
 
 def test_scenario_06_officer_verifies_document(workflow_setup):
     """Scenario 6: Assigned officer verifies the document in vault."""
-    off1_client = workflow_setup["off1_client"]
+    off2_client = workflow_setup["off2_client"]
 
-    verify_res = off1_client.post(f"/api/v1/documents/{shared_state['doc_id']}/verify", {
+    verify_res = off2_client.post(f"/api/v1/documents/{shared_state['doc_id']}/verify", {
         "decision": "VERIFIED",
         "remarks": "Factory layout verified compliant with GPCB distance norms."
     }, format="json")
     assert verify_res.status_code == 200
     doc = verify_res.json()["data"]
     assert doc["verification_status"] == "VERIFIED"
-    assert doc["verified_by_officer_name"] == "Arjun Mehta"
+    assert doc["verified_by_officer_name"] == "Bhavik Shah"
 
 
 def test_scenario_07_owner_sees_updated_result_after_refresh(workflow_setup):
@@ -297,16 +332,16 @@ def test_scenario_07_owner_sees_updated_result_after_refresh(workflow_setup):
     assert doc_res.status_code == 200
     doc = doc_res.json()["data"]
     assert doc["verification_status"] == "VERIFIED"
-    assert doc["verified_by_officer_name"] == "Arjun Mehta"
+    assert doc["verified_by_officer_name"] == "Bhavik Shah"
 
 
 def test_scenario_08_officer_requests_correction_and_owner_resubmits_version(workflow_setup):
     """Scenario 8: Officer requests correction; Owner resubmits new version."""
-    off1_client = workflow_setup["off1_client"]
+    off2_client = workflow_setup["off2_client"]
     owner_client = workflow_setup["owner_client"]
 
     # Officer requests correction with mandatory remarks
-    req_res = off1_client.post(f"/api/v1/documents/{shared_state['doc_id']}/verify", {
+    req_res = off2_client.post(f"/api/v1/documents/{shared_state['doc_id']}/verify", {
         "decision": "CORRECTION_REQUESTED",
         "remarks": "Please provide updated ETP layout dimensions on sheet 2."
     }, format="json")
@@ -329,34 +364,33 @@ def test_scenario_08_officer_requests_correction_and_owner_resubmits_version(wor
 
 
 def test_scenario_09_officer_reassignment_removes_old_access_and_preserves_history(workflow_setup):
-    """Scenario 9: Admin reassigns application to Officer 2. Officer 1 loses access; history preserved."""
+    """Scenario 9: Admin reassigns application to Officer 1. Officer 2 loses access; history preserved."""
     admin_client = workflow_setup["admin_client"]
-    off1_client = workflow_setup["off1_client"]
     off2_client = workflow_setup["off2_client"]
     officer_1 = workflow_setup["officer_1"]
     officer_2 = workflow_setup["officer_2"]
 
     reassign_res = admin_client.post(f"/api/v1/applications/{shared_state['app_id']}/assign", {
-        "officer_user_id": str(officer_2["_id"]),
-        "remarks": "Reassigned to Bhavik Shah due to departmental workload re-balancing."
+        "officer_user_id": str(officer_1["_id"]),
+        "remarks": "Reassigned to Arjun Mehta due to departmental workload re-balancing."
     }, format="json")
     assert reassign_res.status_code == 200
     app_doc = reassign_res.json()["data"]
-    assert str(app_doc["assigned_officer_id"]) == str(officer_2["_id"])
-    assert app_doc["assigned_officer_name"] == "Bhavik Shah"
+    assert str(app_doc["assigned_officer_id"]) == str(officer_1["_id"])
+    assert app_doc["assigned_officer_name"] == "Arjun Mehta"
 
     # Check assignment history length and previous officer id
     history = app_doc["assignment_history"]
     assert len(history) >= 2
-    assert str(history[-1]["previous_officer_id"]) == str(officer_1["_id"])
+    assert str(history[-1]["previous_officer_id"]) == str(officer_2["_id"])
 
-    # Officer 1 now loses scrutiny access
-    off1_access = off1_client.get(f"/api/v1/officer/applications/{shared_state['app_id']}")
-    assert off1_access.status_code == 403
-
-    # Officer 2 now has access
+    # Officer 2 now loses scrutiny access
     off2_access = off2_client.get(f"/api/v1/officer/applications/{shared_state['app_id']}")
-    assert off2_access.status_code == 200
+    assert off2_access.status_code == 403
+
+    # Officer 1 now has access
+    off1_access = workflow_setup["off1_client"].get(f"/api/v1/officer/applications/{shared_state['app_id']}")
+    assert off1_access.status_code == 200
 
 
 def test_scenario_10_scheme_and_grievance_cross_dashboard_behaviour(workflow_setup):
@@ -386,12 +420,37 @@ def test_scenario_10_scheme_and_grievance_cross_dashboard_behaviour(workflow_set
         {"$set": {"department_code": "GPCB-ENV", "state_code": "IN-GJ"}}
     )
 
+    scheme_attest_res = owner_client.post(f"/api/v1/scheme-applications/{scheme_id}/attest/", {
+        "external_portal_name": "Gujarat Investor Facilitation Portal",
+        "external_acknowledgement_number": "IFP/2026/GJ/1002",
+        "external_submission_date": datetime.now(timezone.utc).date().isoformat(),
+        "attestation_confirmed": True
+    }, format="json")
+    assert scheme_attest_res.status_code == 200
+    scheme_reference = scheme_attest_res.json()["data"]["application"]["application_reference"]
+    from apps.notifications.repository import NotificationRepository
+    notif_repo = NotificationRepository()
+    for officer in (officer_1, officer_2):
+        matching_notifications = [
+            notification for notification in notif_repo.find_by_user(officer["_id"])
+            if notification["reference_id"] == scheme_reference
+        ]
+        assert len(matching_notifications) == 1
+        assert matching_notifications[0]["title"] == f"Scheme dossier ready for review: {scheme_reference}"
+        assert "Vikramaditya Singhania" in matching_notifications[0]["message"]
+
     # Super Admin assigns scheme review to Officer 1
     assign_scheme_res = admin_client.post(f"/api/v1/admin/scheme-reviews/{scheme_id}/reassign/", {
         "new_officer_id": str(officer_1["_id"]),
         "justification": "Assigned for capital subsidy technical scrutiny."
     }, format="json")
     assert assign_scheme_res.status_code == 200
+    assignment_notifications = [
+        notification for notification in notif_repo.find_by_user(officer_1["_id"])
+        if notification["reference_id"] == scheme_reference
+        and notification["title"] == f"New scrutiny assignment: {scheme_reference}"
+    ]
+    assert len(assignment_notifications) == 1
 
     # Officer 1 sees it; Officer 2 is forbidden
     assert off1_client.get(f"/api/v1/officer/scheme-reviews/{scheme_id}/").status_code == 200

@@ -286,9 +286,9 @@ def test_01_concurrent_duplicate_application_creation(hardening_setup):
     # 3. Now submit the application
     sub = client_a.post(f"/api/v1/applications/{draft_app_id}/submit", {"confirmation": True}, format="json")
     assert sub.status_code == 200
-    assert sub.json()["data"]["status"] == "SUBMITTED"
+    assert sub.json()["data"]["status"] == "UNDER_SCRUTINY"
 
-    # 4. Attempting to create another application while an active one is SUBMITTED must be strictly rejected
+    # 4. Attempting to create another application while an active one is under scrutiny must be rejected.
     res3 = client_a.post("/api/v1/applications", {
         "business_id": str(data["biz_a"]["_id"]),
         "location_id": str(data["loc_a_gj"]["_id"]),
@@ -312,7 +312,7 @@ def test_02_unauthorized_officer_cross_jurisdiction_actions(hardening_setup):
     gj_app = app_repo.collection.find_one({
         "location_id": data["loc_a_gj"]["_id"],
         "approval_code": "GPCB-CTE-IND",
-        "status": "SUBMITTED"
+        "status": "UNDER_SCRUTINY"
     })
     assert gj_app is not None
     app_id = str(gj_app["_id"])
@@ -387,7 +387,7 @@ def test_04_submitted_application_immutability_across_all_endpoints(hardening_se
     sub_app = app_repo.collection.find_one({
         "location_id": data["loc_a_gj"]["_id"],
         "approval_code": "GPCB-CTE-IND",
-        "status": "SUBMITTED"
+        "status": "UNDER_SCRUTINY"
     })
     app_id = str(sub_app["_id"])
 
@@ -426,7 +426,7 @@ def test_05_unauthorized_approval_rejection_attempts(hardening_setup):
     sub_app = app_repo.collection.find_one({
         "location_id": data["loc_a_gj"]["_id"],
         "approval_code": "GPCB-CTE-IND",
-        "status": "SUBMITTED"
+        "status": "UNDER_SCRUTINY"
     })
     app_id = str(sub_app["_id"])
 

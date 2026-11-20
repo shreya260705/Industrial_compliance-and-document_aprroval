@@ -6,7 +6,6 @@ from django.http import HttpResponse
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from apps.database.connection import get_db
 from apps.common.responses import api_success_response
 from apps.common.base_repository import BaseRepository
 from apps.common.exceptions import (
@@ -239,31 +238,6 @@ class ApplicationSubmitView(APIView):
         except ValueError as err:
             raise ValidationException(str(err))
 
-        db = get_db()
-        department_scope = {
-            "$or": [
-                {"officer_profile.department_code": submitted["department_code"]},
-                {"department_code": submitted["department_code"]}
-            ]
-        }
-        officer_query = {
-            "role": "DEPARTMENT_OFFICER",
-            "is_active": True,
-            "$and": [department_scope]
-        }
-        state_code = submitted.get("state_code") or submitted.get("jurisdiction_code")
-        if state_code:
-            officer_query["$and"].append({
-                "$or": [
-                    {"officer_profile.jurisdiction_code": state_code},
-                    {"officer_profile.jurisdiction_code": "IN-ALL"},
-                    {"jurisdiction_code": state_code},
-                    {"jurisdiction_code": "IN-ALL"}
-                ]
-            })
-        dept_officers = list(db.users.find(officer_query))
-        officer_ids = [o["_id"] for o in dept_officers]
-
         from apps.common.workflow_engine import WorkflowEngine
         WorkflowEngine.publish_event(
             event_type="APPLICATION_SUBMITTED",
@@ -272,15 +246,38 @@ class ApplicationSubmitView(APIView):
             target_collection="applications",
             target_id=pk,
             title=f"Application {submitted['application_number']} Submitted",
-            message=f"Your application for '{submitted['approval_title']}' has been submitted for scrutiny.",
+            message=f"Application for '{submitted['approval_title']}' has been submitted for departmental scrutiny.",
             payload={"app_number": submitted["application_number"], "dept": submitted["department_code"], "state": submitted["state_code"]},
-            recipient_user_ids=[request.user.id] + officer_ids,
+            recipient_user_ids=[request.user.id],
             reference_id=submitted["application_number"]
         )
 
+        officer = WorkflowEngine.select_least_loaded_officer(
+            submitted.get("department_code"),
+            submitted.get("state_code") or submitted.get("jurisdiction_code")
+        )
+        if officer:
+            submitted = WorkflowEngine.assign_officer(
+                target_collection="applications",
+                target_id=pk,
+                officer_user_id=officer["_id"],
+                assigned_by_user_id=None,
+                assigned_by_role="SYSTEM",
+                remarks="Automatically assigned to the least-loaded eligible officer."
+            )
+            response_message = (
+                f"Application submitted and assigned to {submitted.get('assigned_officer_name')} "
+                "for departmental scrutiny."
+            )
+        else:
+            response_message = (
+                "Application submitted successfully. It is awaiting assignment to an eligible "
+                "department scrutiny officer."
+            )
+
         return api_success_response(
             data=BaseRepository.serialize_doc(submitted),
-            message="Application submitted for departmental scrutiny successfully.",
+            message=response_message,
             request=request
         )
 
