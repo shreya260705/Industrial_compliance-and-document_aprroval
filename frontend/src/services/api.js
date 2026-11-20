@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clearAuthorizationHeader, setAuthorizationHeader } from '../utils/authRequest.js';
 import { loadBusinessLocations } from '../utils/facilityLocations.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
@@ -14,9 +15,7 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('bizpermit_access_token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
+    setAuthorizationHeader(config.headers, config.url, token);
     return config;
   },
   (error) => Promise.reject(error)
@@ -49,6 +48,7 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('bizpermit_access_token');
         localStorage.removeItem('bizpermit_refresh_token');
         localStorage.removeItem('bizpermit_user');
+        clearAuthorizationHeader(apiClient.defaults.headers.common);
         return Promise.reject(error);
       }
 
@@ -77,7 +77,6 @@ apiClient.interceptors.response.use(
           if (newTokens.refresh_token) {
             localStorage.setItem('bizpermit_refresh_token', newTokens.refresh_token);
           }
-          apiClient.defaults.headers.common['Authorization'] = `Bearer ${newTokens.access_token}`;
           originalRequest.headers['Authorization'] = `Bearer ${newTokens.access_token}`;
           processQueue(null, newTokens.access_token);
           return apiClient(originalRequest);
@@ -87,6 +86,7 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('bizpermit_access_token');
         localStorage.removeItem('bizpermit_refresh_token');
         localStorage.removeItem('bizpermit_user');
+        clearAuthorizationHeader(apiClient.defaults.headers.common);
         window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {
