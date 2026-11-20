@@ -19,6 +19,7 @@ import {
   Eye,
   Trash2,
   Paperclip,
+  UploadCloud,
   Check,
   ArrowRight,
   ExternalLink,
@@ -62,6 +63,8 @@ export const ApplicationsPage = () => {
   const [selectedApproval, setSelectedApproval] = useState(null);
   const [activeDraft, setActiveDraft] = useState(null);
   const [userVaultDocs, setUserVaultDocs] = useState([]);
+  const [uploadingDocumentType, setUploadingDocumentType] = useState('');
+  const [attachmentError, setAttachmentError] = useState('');
   const [formData, setFormData] = useState({
     project_capital_cost_lakhs: 500,
     proposed_commissioning_date: '',
@@ -117,6 +120,23 @@ export const ApplicationsPage = () => {
     }
   }, [currentLocation]);
 
+  const loadVaultDocsForBusiness = async (businessId) => {
+    if (!businessId) {
+      setUserVaultDocs([]);
+      return;
+    }
+    try {
+      const docRes = await documentAPI.list({ business_id: businessId, page_size: 100 });
+      if (!docRes.data?.success || !Array.isArray(docRes.data.data)) {
+        throw new Error(docRes.data?.error?.message || 'The server returned an invalid Vault document list.');
+      }
+      setUserVaultDocs(docRes.data.data);
+    } catch (err) {
+      console.error('Failed to load Vault documents for application:', err);
+      setAttachmentError(err.response?.data?.error?.message || err.message || 'Failed to load Vault documents.');
+    }
+  };
+
   // Handle Search on Enter or debounce
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -129,21 +149,13 @@ export const ApplicationsPage = () => {
     setStatutoryAgreed(false);
     setActiveDraft(null);
     setSelectedApproval(null);
+    setAttachmentError('');
     const initialFac = locations.find((l) => l.id === selectedFacilityId) || locations[0] || null;
     setWizardFacility(initialFac);
 
     if (initialFac) {
       loadApprovalsForFacility(initialFac);
-    }
-
-    // Preload user's vault documents
-    try {
-      const docRes = await documentAPI.list();
-      if (docRes.data?.success) {
-        setUserVaultDocs(docRes.data.data || []);
-      }
-    } catch (err) {
-      console.error('Failed to load vault documents:', err);
+      await loadVaultDocsForBusiness(initialFac.business_id);
     }
 
     setIsWizardOpen(true);
@@ -180,6 +192,7 @@ export const ApplicationsPage = () => {
   const handleFacilitySelect = (fac) => {
     setWizardFacility(fac);
     loadApprovalsForFacility(fac);
+    loadVaultDocsForBusiness(fac.business_id);
     setWizardStep(2);
   };
 
@@ -197,6 +210,7 @@ export const ApplicationsPage = () => {
       if (res.data?.success) {
         const draft = res.data.data;
         setActiveDraft(draft);
+        await loadVaultDocsForBusiness(draft.business_id || wizardFacility.business_id);
         if (draft.applicant_form_data) {
           setFormData((prev) => ({
             ...prev,
@@ -251,6 +265,52 @@ export const ApplicationsPage = () => {
       }
     } catch (err) {
       alert(err.response?.data?.error?.message || err.message || 'Failed to remove document attachment.');
+    }
+  };
+
+  const handleUploadAndAttach = async (event, requirement) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !activeDraft) return;
+
+    const maxSizeMb = Number(requirement.max_size_mb) || 25;
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      setAttachmentError(`The selected file exceeds the ${maxSizeMb} MB limit for this upload.`);
+      return;
+    }
+
+    setAttachmentError('');
+    setUploadingDocumentType(requirement.document_type);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('document_name', requirement.name || file.name);
+      formData.append('title', requirement.name || file.name);
+      formData.append('document_category', requirement.document_type);
+      formData.append('business_id', activeDraft.business_id);
+      formData.append('location_id', activeDraft.location_id);
+
+      const uploadRes = await documentAPI.directUpload(formData);
+      const uploadedDocument = uploadRes.data?.data;
+      if (!uploadedDocument?.id) {
+        throw new Error('The Vault did not return the uploaded document reference.');
+      }
+
+      const attachRes = await applicationAPI.attachDocument(activeDraft.id, uploadedDocument.id);
+      if (!attachRes.data?.success || !attachRes.data?.data) {
+        throw new Error(attachRes.data?.error?.message || 'The uploaded document could not be attached.');
+      }
+      setActiveDraft(attachRes.data.data);
+      setUserVaultDocs((current) => [uploadedDocument, ...current]);
+    } catch (err) {
+      setAttachmentError(
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to upload and attach the document.'
+      );
+    } finally {
+      setUploadingDocumentType('');
     }
   };
 
@@ -896,9 +956,14 @@ export const ApplicationsPage = () => {
                       Required Statutory Document Checklist
                     </h4>
                     <p className="text-[11px] text-stone-500">
-                      Link verified blueprints and certificates stored in your BizPermit Vault. Zero duplicate uploads required.
+                      Upload a file directly or attach an existing Vault record. Officers verify documents during scrutiny.
                     </p>
                   </div>
+                  {attachmentError && (
+                    <div role="alert" className="p-3 rounded bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                      {attachmentError}
+                    </div>
+                  )}
 
                   <div className="space-y-3">
                     {(activeDraft.required_document_checklist || []).map((req, idx) => {
@@ -909,7 +974,8 @@ export const ApplicationsPage = () => {
 
                       // Match available in user's vault
                       const availableInVault = userVaultDocs.filter(
-                        (d) => d.document_category === req.document_type
+                        (d) => d.document_category === req.document_type &&
+                          (!d.location_id || d.location_id === activeDraft.location_id)
                       );
 
                       return (
@@ -945,19 +1011,35 @@ export const ApplicationsPage = () => {
                                   <X className="h-3.5 w-3.5" />
                                 </button>
                               </div>
-                            ) : availableInVault.length > 0 ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleAttachVaultDoc(availableInVault[0].id)}
-                                className="text-brand-deep-sage hover:bg-brand-pale-sage text-[11px]"
-                              >
-                                Attach from Vault
-                              </Button>
                             ) : (
-                              <span className="text-[11px] text-stone-400 italic">
-                                Missing in Vault
-                              </span>
+                              <div className="flex items-center gap-2">
+                                {availableInVault.length > 0 && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleAttachVaultDoc(availableInVault[0].id)}
+                                    className="text-brand-deep-sage hover:bg-brand-pale-sage text-[11px]"
+                                  >
+                                    Attach from Vault
+                                  </Button>
+                                )}
+                                <label className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-brand-deep-sage text-brand-deep-sage hover:bg-brand-pale-sage text-[11px] font-medium cursor-pointer ${uploadingDocumentType === req.document_type ? 'opacity-50 pointer-events-none' : ''}`}>
+                                  <UploadCloud className="h-3.5 w-3.5" />
+                                  {uploadingDocumentType === req.document_type ? 'Uploading...' : 'Upload & attach'}
+                                  <input
+                                    type="file"
+                                    accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                                    className="hidden"
+                                    disabled={Boolean(uploadingDocumentType)}
+                                    onChange={(event) => handleUploadAndAttach(event, req)}
+                                  />
+                                </label>
+                                {availableInVault.length === 0 && uploadingDocumentType !== req.document_type && (
+                                  <span className="text-[10px] text-stone-400">
+                                    Max {Number(req.max_size_mb) || 25} MB
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                         </div>

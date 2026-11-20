@@ -49,11 +49,11 @@ export const ComplianceDashboardPage = () => {
     try {
       const params = {};
       if (currentBusiness?.id) params.business_id = currentBusiness.id;
-      if (selectedFacilityId) params.facility_id = selectedFacilityId;
+      if (selectedFacilityId) params.location_id = selectedFacilityId;
 
       const [metricsRes, listRes] = await Promise.all([
         complianceAPI.getMetrics(params),
-        complianceAPI.listObligations({ ...params, limit: 10 }),
+        complianceAPI.listObligations({ ...params, page: 1, page_size: 10 }),
       ]);
 
       setMetrics(metricsRes.data?.data || null);
@@ -71,13 +71,17 @@ export const ComplianceDashboardPage = () => {
     try {
       const res = await complianceAPI.generateForLocation(facilityId);
       const data = res.data?.data;
-      setGenerationMsg(
-        `Generated ${data.created_count} statutory obligations for ${data.facility_name || 'facility'}.`
-      );
+      if (!Array.isArray(data)) {
+        throw new Error(res.data?.error?.message || 'The server returned an invalid generation result.');
+      }
+      const locationName = locations.find((location) => location.id === facilityId)?.location_name || 'facility';
+      setGenerationMsg(data.length > 0
+        ? `Generated ${data.length} statutory obligations for ${locationName}.`
+        : `No new obligations were generated for ${locationName}; applicable obligations may already exist.`);
       await loadComplianceDashboard();
     } catch (err) {
       setGenerationMsg(
-        `Error: ${err.response?.data?.error?.message || 'Failed to generate obligations'}`
+        `Error: ${err.response?.data?.error?.message || err.message || 'Failed to generate obligations'}`
       );
     } finally {
       setGeneratingForLoc(null);

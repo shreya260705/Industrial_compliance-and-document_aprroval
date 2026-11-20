@@ -63,9 +63,9 @@ export const ComplianceCalendarPage = () => {
         end_date: endDate,
       };
       if (currentBusiness?.id) params.business_id = currentBusiness.id;
-      if (facilityFilter) params.facility_id = facilityFilter;
+      if (facilityFilter) params.location_id = facilityFilter;
       if (statusFilter) params.status = statusFilter;
-      if (categoryFilter) params.compliance_category = categoryFilter;
+      if (categoryFilter) params.category = categoryFilter;
 
       const res = await complianceAPI.getCalendarEvents(params);
       setEvents(res.data?.data || []);

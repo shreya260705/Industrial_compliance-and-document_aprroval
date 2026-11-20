@@ -236,7 +236,8 @@ class ComplianceObligationRepository(BaseRepository):
     def get_metrics_for_user(
         self,
         user_id: Union[str, ObjectId],
-        business_id: Optional[Union[str, ObjectId]] = None
+        business_id: Optional[Union[str, ObjectId]] = None,
+        location_id: Optional[Union[str, ObjectId]] = None
     ) -> Dict[str, Any]:
         u_oid = self.to_object_id(user_id)
         if not u_oid:
@@ -247,6 +248,10 @@ class ComplianceObligationRepository(BaseRepository):
             b_oid = self.to_object_id(business_id)
             if b_oid:
                 match_stage["business_id"] = b_oid
+        if location_id:
+            l_oid = self.to_object_id(location_id)
+            if l_oid:
+                match_stage["location_id"] = l_oid
 
         pipeline = [
             {"$match": match_stage},
@@ -325,7 +330,8 @@ class ComplianceObligationRepository(BaseRepository):
     def get_facility_summary_for_user(
         self,
         user_id: Union[str, ObjectId],
-        business_id: Optional[Union[str, ObjectId]] = None
+        business_id: Optional[Union[str, ObjectId]] = None,
+        location_id: Optional[Union[str, ObjectId]] = None
     ) -> List[Dict[str, Any]]:
         u_oid = self.to_object_id(user_id)
         if not u_oid:
@@ -336,6 +342,10 @@ class ComplianceObligationRepository(BaseRepository):
             b_oid = self.to_object_id(business_id)
             if b_oid:
                 match_stage["business_id"] = b_oid
+        if location_id:
+            l_oid = self.to_object_id(location_id)
+            if l_oid:
+                match_stage["location_id"] = l_oid
 
         pipeline = [
             {"$match": match_stage},
@@ -354,6 +364,7 @@ class ComplianceObligationRepository(BaseRepository):
         self,
         user_id: Union[str, ObjectId],
         business_id: Optional[Union[str, ObjectId]] = None,
+        location_id: Optional[Union[str, ObjectId]] = None,
         skip: int = 0,
         limit: int = 20
     ) -> List[Dict[str, Any]]:
@@ -369,6 +380,10 @@ class ComplianceObligationRepository(BaseRepository):
             b_oid = self.to_object_id(business_id)
             if b_oid:
                 query["business_id"] = b_oid
+        if location_id:
+            l_oid = self.to_object_id(location_id)
+            if l_oid:
+                query["location_id"] = l_oid
 
         cursor = self.collection.find(query).sort("due_date", 1).skip(skip).limit(limit)
         return list(cursor)

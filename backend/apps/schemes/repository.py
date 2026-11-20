@@ -838,6 +838,11 @@ class SchemeApplicationRepository(BaseRepository):
         v_doc = doc_repo.find_by_id_for_user(vault_document_id, user_id)
         if not v_doc:
             raise PermissionError("Document not found or does not belong to your business.")
+        if str(v_doc.get("business_id")) != str(app.get("business_id")):
+            raise ValueError("Scheme dossier documents must belong to the same business.")
+        document_location_id = v_doc.get("location_id")
+        if document_location_id and str(document_location_id) != str(app.get("location_id")):
+            raise ValueError("Location-specific documents must belong to the dossier location.")
 
         v_oid = self.to_object_id(vault_document_id)
         # Avoid duplicate attachment of same document

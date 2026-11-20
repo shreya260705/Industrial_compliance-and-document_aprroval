@@ -55,6 +55,11 @@ export const OfficerQueuePage = () => {
   const officerProfile = user?.officer_profile || {};
   const deptCode = officerProfile.department_code || (isSuperAdmin ? 'ALL_DEPARTMENTS' : 'N/A');
   const jurisdictionCode = officerProfile.jurisdiction_code || (isSuperAdmin ? 'NATIONAL' : 'N/A');
+  const allowedActions = selectedApp?.status === 'SUBMITTED'
+    ? ['MARK_SCRUTINY', 'REQUEST_CLARIFICATION', 'REJECT']
+    : ['UNDER_SCRUTINY', 'RESUBMITTED'].includes(selectedApp?.status)
+      ? ['REQUEST_CLARIFICATION', 'APPROVE', 'REJECT']
+      : [];
 
   const loadQueue = async () => {
     try {
@@ -95,6 +100,9 @@ export const OfficerQueuePage = () => {
         } else if (res.data.data.status === 'UNDER_SCRUTINY' || res.data.data.status === 'RESUBMITTED') {
           setActionType('APPROVE');
           setActionRemarks('All application parameters, facility drawings, and pollution abatement disclosures verified compliant in prototype evaluation.');
+        } else {
+          setActionType('');
+          setActionRemarks('');
         }
       }
     } catch (err) {
@@ -106,7 +114,7 @@ export const OfficerQueuePage = () => {
   };
 
   const handleExecuteAction = async () => {
-    if (!selectedApp) return;
+    if (!selectedApp || !allowedActions.includes(actionType)) return;
     if (!actionRemarks.trim()) {
       alert('Remarks are required for officer audit logs.');
       return;
@@ -492,7 +500,7 @@ export const OfficerQueuePage = () => {
                       { type: 'REQUEST_CLARIFICATION', label: '2. Raise Clarification', activeClass: 'bg-orange-100 text-orange-900 border-orange-400' },
                       { type: 'APPROVE', label: '3. Record Approval Decision', activeClass: 'bg-emerald-100 text-emerald-900 border-emerald-400' },
                       { type: 'REJECT', label: '4. Reject Dossier', activeClass: 'bg-rose-100 text-rose-900 border-rose-400' },
-                    ].map((act) => (
+                    ].filter((act) => allowedActions.includes(act.type)).map((act) => (
                       <button
                         key={act.type}
                         type="button"
@@ -518,6 +526,17 @@ export const OfficerQueuePage = () => {
                   </div>
 
                   {/* Action Specific Fields */}
+                  {allowedActions.length === 0 ? (
+                    <p className="text-xs text-stone-600 bg-white border border-stone-200 rounded-lg p-3">
+                      {selectedApp.status === 'CLARIFICATION'
+                        ? "This application is awaiting the applicant's clarification response. The officer can act again after it is resubmitted."
+                        : "No further officer action is available for the application's current status."}
+                    </p>
+                  ) : selectedApp.status === 'SUBMITTED' ? (
+                    <p className="text-xs text-stone-600 bg-white border border-stone-200 rounded-lg p-3">
+                      Approval is available only after the application is marked Under Scrutiny. You can request clarification or reject it while it is Submitted.
+                    </p>
+                  ) : null}
                   <div className="space-y-3 text-xs">
                     {actionType === 'REQUEST_CLARIFICATION' && (
                       <div>
@@ -572,7 +591,7 @@ export const OfficerQueuePage = () => {
                     <Button
                       size="sm"
                       onClick={handleExecuteAction}
-                      disabled={submittingAction}
+                      disabled={submittingAction || !allowedActions.includes(actionType)}
                       className="bg-brand-deep-sage text-white font-semibold flex items-center gap-1.5"
                     >
                       {submittingAction ? 'Recording Decision...' : 'Record Decision'}

@@ -26,6 +26,8 @@ def test_setup():
         "owner.phase4b@competitor.in",
         "officer.gj.p4@gpcb.gov.in",
         "officer.mh.p4@mpcb.gov.in",
+        "officer.gj.dish.p4@gujarat.gov.in",
+        "officer.mh.dish.p4@maharashtra.gov.in",
         "admin.phase4@bizpermit.gov.in"
     ]
     # Ensure master regulatory data exists
@@ -79,6 +81,30 @@ def test_setup():
             "department_code": "MPCB-ENV",
             "jurisdiction_code": "IN-MH",
             "designation": "Regional Scrutiny Officer"
+        }
+    )
+
+    officer_gj_dish = user_repo.create_user(
+        email="officer.gj.dish.p4@gujarat.gov.in",
+        password_hash=default_pass,
+        full_name="Gujarat Factory Safety Officer",
+        role="DEPARTMENT_OFFICER",
+        officer_profile={
+            "department_code": "GJ-DISH",
+            "jurisdiction_code": "IN-GJ",
+            "designation": "Factory & Boilers Scrutiny Officer"
+        }
+    )
+
+    officer_mh_dish = user_repo.create_user(
+        email="officer.mh.dish.p4@maharashtra.gov.in",
+        password_hash=default_pass,
+        full_name="Maharashtra Factory Safety Officer",
+        role="DEPARTMENT_OFFICER",
+        officer_profile={
+            "department_code": "GJ-DISH",
+            "jurisdiction_code": "IN-MH",
+            "designation": "Factory & Boilers Scrutiny Officer"
         }
     )
 
@@ -164,6 +190,8 @@ def test_setup():
         "user_b": user_b,
         "officer_gj": officer_gj,
         "officer_mh": officer_mh,
+        "officer_gj_dish": officer_gj_dish,
+        "officer_mh_dish": officer_mh_dish,
         "admin": admin_user,
         "biz_a": biz_a,
         "loc_a": loc_a,
@@ -274,6 +302,32 @@ def test_03_vault_document_attachment_and_ownership_defense(test_setup):
     assert len(attachments) == 1
     assert attachments[0]["document_category"] == "SITE_PLAN_LAYOUT"
 
+    # A document for another location in the same business cannot be attached.
+    other_loc = LocationRepository().create_location(
+        business_id=data["biz_a"]["_id"],
+        location_name="Second Gujarat Unit",
+        facility_type="MANUFACTURING_PLANT",
+        address={"line1": "Plot 20, GIDC Ankleshwar", "city": "Ankleshwar", "district": "Bharuch", "state_code": "IN-GJ", "pincode": "393002"},
+        jurisdiction_hierarchy={"state_code": "IN-GJ", "district_code": "IN-GJ-BHA", "local_body_code": "GIDC-ANKLESHWAR"},
+        industrial_profile={"nic_code": "2011", "sector_name": "Chemicals", "scale": "MEDIUM", "pollution_category": "RED"}
+    )
+    other_loc_doc = DocumentRepository().create_document(
+        owner_user_id=data["user_a"]["_id"],
+        business_id=data["biz_a"]["_id"],
+        location_id=other_loc["_id"],
+        document_name="Second unit site plan",
+        document_category="SITE_PLAN",
+        original_filename="second_unit_site_plan.pdf",
+        storage_object_path=f"businesses/{data['biz_a']['_id']}/docs/second_unit_site_plan.pdf",
+        mime_type="application/pdf",
+        file_size_bytes=1024,
+        sha256_checksum="a" * 64
+    )
+    wrong_location_att = client_a.post(f"/api/v1/applications/{app_id}/attachments", {
+        "vault_document_id": str(other_loc_doc["_id"])
+    }, format="json")
+    assert wrong_location_att.status_code == 400
+
     # User B attempts to attach User A's document to an application -> blocked
     loc_b = LocationRepository().create_location(
         business_id=data["biz_b"]["_id"],
@@ -324,6 +378,10 @@ def test_04_application_submission_and_immutability(test_setup):
     assert sub_res.status_code == 200
     assert sub_res.json()["data"]["status"] == "SUBMITTED"
     assert sub_res.json()["data"]["submitted_at"] is not None
+    from apps.notifications.repository import NotificationRepository
+    notifications = NotificationRepository()
+    assert notifications.count_by_user(data["officer_gj_dish"]["_id"]) > 0
+    assert notifications.count_by_user(data["officer_mh_dish"]["_id"]) == 0
 
     # Post-submission edit must be blocked
     patch_after_sub = client_a.patch(f"/api/v1/applications/{app_id}", {

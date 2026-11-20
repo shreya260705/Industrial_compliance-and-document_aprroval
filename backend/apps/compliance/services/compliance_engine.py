@@ -263,6 +263,11 @@ class ComplianceEngineService:
                 doc = doc_repo.find_by_id_for_user(doc_id_str, user_id)
                 if not doc:
                     raise ValueError(f"Vault document {doc_id_str} not found or does not belong to your enterprise.")
+                if str(doc.get("business_id")) != str(obligation.get("business_id")):
+                    raise ValueError("Completion evidence must belong to the same business as the obligation.")
+                document_location_id = doc.get("location_id")
+                if document_location_id and str(document_location_id) != str(obligation.get("location_id")):
+                    raise ValueError("Location-specific evidence must belong to the obligation location.")
                 attached_docs.append({
                     "vault_document_id": doc["_id"],
                     "document_name": doc["document_name"],

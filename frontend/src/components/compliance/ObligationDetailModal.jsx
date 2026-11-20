@@ -40,6 +40,7 @@ export const ObligationDetailModal = ({
   const [selectedVaultDocIds, setSelectedVaultDocIds] = useState([]);
   const [availableVaultDocs, setAvailableVaultDocs] = useState([]);
   const [loadingVault, setLoadingVault] = useState(false);
+  const [vaultError, setVaultError] = useState('');
 
   // Date Confirmation Form State
   const [confirmedDate, setConfirmedDate] = useState('');
@@ -70,8 +71,8 @@ export const ObligationDetailModal = ({
       if (data?.due_date) {
         setConfirmedDate(data.due_date.substring(0, 10));
       }
-      if (data?.facility_id) {
-        loadVaultDocuments(data.facility_id);
+      if (data?.location_id && data?.business_id) {
+        loadVaultDocuments(data.business_id, data.location_id);
       }
     } catch (err) {
       setError(err.response?.data?.error?.message || 'Failed to load obligation details');
@@ -80,13 +81,19 @@ export const ObligationDetailModal = ({
     }
   };
 
-  const loadVaultDocuments = async (facilityId) => {
+  const loadVaultDocuments = async (businessId, locationId) => {
     setLoadingVault(true);
+    setVaultError('');
     try {
-      const res = await documentAPI.list({ location_id: facilityId });
-      setAvailableVaultDocs(res.data?.data || []);
-    } catch {
-      setAvailableVaultDocs([]);
+      const res = await documentAPI.list({ business_id: businessId, page_size: 100 });
+      if (!res.data?.success || !Array.isArray(res.data.data)) {
+        throw new Error(res.data?.error?.message || 'The server returned an invalid Vault document list.');
+      }
+      setAvailableVaultDocs(res.data.data.filter((doc) =>
+        !doc.location_id || doc.location_id === locationId
+      ));
+    } catch (err) {
+      setVaultError(err.response?.data?.error?.message || err.message || 'Failed to load Vault evidence.');
     } finally {
       setLoadingVault(false);
     }
@@ -430,6 +437,8 @@ export const ObligationDetailModal = ({
                     </label>
                     {loadingVault ? (
                       <p className="text-stone-400">Loading vault documents...</p>
+                    ) : vaultError ? (
+                      <p role="alert" className="text-rose-700">{vaultError}</p>
                     ) : availableVaultDocs.length === 0 ? (
                       <div className="p-3 bg-stone-50 border border-stone-200 rounded-lg text-stone-500 text-center">
                         No vault documents uploaded for this business location yet. You can complete with remarks or upload documents in the Document Vault first.

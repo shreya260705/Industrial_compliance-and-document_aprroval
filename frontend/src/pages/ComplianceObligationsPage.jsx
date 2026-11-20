@@ -60,13 +60,13 @@ export const ComplianceObligationsPage = () => {
     setLoading(true);
     try {
       const params = {
-        skip: (page - 1) * 20,
-        limit: 20,
+        page,
+        page_size: 20,
       };
       if (currentBusiness?.id) params.business_id = currentBusiness.id;
-      if (facilityFilter) params.facility_id = facilityFilter;
+      if (facilityFilter) params.location_id = facilityFilter;
       if (statusFilter) params.status = statusFilter;
-      if (categoryFilter) params.compliance_category = categoryFilter;
+      if (categoryFilter) params.category = categoryFilter;
       if (searchQuery.trim()) params.search = searchQuery.trim();
 
       const res = await complianceAPI.listObligations(params);
@@ -77,7 +77,7 @@ export const ComplianceObligationsPage = () => {
       }
 
       setObligations(list);
-      setTotalCount(res.data?.count ?? list.length);
+      setTotalCount(res.data?.meta?.pagination?.total_records ?? list.length);
     } catch (err) {
       console.error('Failed to load obligations:', err);
     } finally {

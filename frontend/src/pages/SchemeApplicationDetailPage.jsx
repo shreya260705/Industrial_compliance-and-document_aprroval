@@ -43,6 +43,7 @@ export const SchemeApplicationDetailPage = () => {
   const [showVaultModal, setShowVaultModal] = useState(false);
   const [vaultDocuments, setVaultDocuments] = useState([]);
   const [loadingVault, setLoadingVault] = useState(false);
+  const [vaultLoadError, setVaultLoadError] = useState('');
   const [selectedVaultDocId, setSelectedVaultDocId] = useState('');
   const [docCategory, setDocCategory] = useState('GENERAL_COMPLIANCE');
   const [attachingDoc, setAttachingDoc] = useState(false);
@@ -138,13 +139,20 @@ export const SchemeApplicationDetailPage = () => {
   const openVaultModal = async () => {
     setShowVaultModal(true);
     setLoadingVault(true);
+    setVaultLoadError('');
     try {
-      const res = await documentAPI.list({ business_id: application.business_id });
-      const docs = res.data?.data?.documents || [];
+      const res = await documentAPI.list({ business_id: application.business_id, page_size: 100 });
+      if (!res.data?.success || !Array.isArray(res.data.data)) {
+        throw new Error(res.data?.error?.message || 'The server returned an invalid Vault document list.');
+      }
+      const docs = res.data.data.filter((doc) =>
+        !doc.location_id || doc.location_id === application.location_id
+      );
       setVaultDocuments(docs);
       if (docs.length > 0) setSelectedVaultDocId(docs[0].id);
     } catch (err) {
       console.error('Vault load error:', err);
+      setVaultLoadError(err.response?.data?.error?.message || err.message || 'Failed to load Vault documents.');
     } finally {
       setLoadingVault(false);
     }
@@ -771,6 +779,8 @@ export const SchemeApplicationDetailPage = () => {
 
             {loadingVault ? (
               <div className="py-8 text-center text-xs text-stone-500">Loading your Document Vault...</div>
+            ) : vaultLoadError ? (
+              <div role="alert" className="py-6 text-center text-xs text-rose-700">{vaultLoadError}</div>
             ) : vaultDocuments.length === 0 ? (
               <div className="py-6 text-center text-xs text-stone-500">
                 No documents found in your Document Vault. Please upload certificates in Document Vault first.
@@ -789,7 +799,7 @@ export const SchemeApplicationDetailPage = () => {
                   >
                     {vaultDocuments.map(doc => (
                       <option key={doc.id} value={doc.id}>
-                        {doc.title || doc.original_filename} ({doc.document_category})
+                        {doc.document_name || doc.title || doc.original_filename} ({doc.document_category})
                       </option>
                     ))}
                   </select>

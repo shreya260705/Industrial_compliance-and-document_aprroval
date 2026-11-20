@@ -83,6 +83,7 @@ class LoginSerializer(serializers.Serializer):
         demo_emails = {
             "owner@horizonauto.in",
             "officer.gpcb@gujarat.gov.in",
+            "officer.dish@gujarat.gov.in",
             "officer.mpcb@maharashtra.gov.in",
             "admin@bizpermit.gov.in",
         }

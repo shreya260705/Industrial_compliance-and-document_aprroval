@@ -154,7 +154,7 @@ export const SchemeApplicationsPage = () => {
             Scheme Application Dossiers & External Submissions
           </h1>
           <p className="text-xs text-stone-600 mt-1 max-w-2xl">
-            Prepare compliance dossiers, link Document Vault certificates, and record verified user self-attestations following submission on designated government portals.
+            Prepare an incentive-application dossier for a government scheme with open intake, reuse Vault certificates, and record submission on the official portal. Super Admins manage the scheme catalogue.
           </p>
         </div>
 
@@ -293,6 +293,9 @@ export const SchemeApplicationsPage = () => {
                 ✕
               </button>
             </div>
+            <p className="text-[11px] text-stone-600">
+              This creates your application dossier for an existing open scheme. Adding or approving a scheme in the catalogue is a Super Admin task.
+            </p>
 
             {createError && (
               <div role="alert" className="p-3 rounded bg-rose-50 border border-rose-200 text-rose-700 text-xs">

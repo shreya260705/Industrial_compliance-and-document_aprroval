@@ -391,6 +391,21 @@ def test_06_secure_document_vault_direct_upload(user_a_client):
     assert "sha256_checksum" in doc
     assert len(doc["sha256_checksum"]) == 64
 
+    checklist_file = io.BytesIO(VALID_PDF_BYTES + b"\n% checklist category upload")
+    checklist_file.name = "Approved_Site_Plan.pdf"
+    checklist_upload = user_a_client.post(
+        "/api/v1/documents/direct-upload",
+        {
+            "business_id": biz["id"],
+            "document_name": "Approved Site Plan",
+            "document_category": "SITE_PLAN",
+            "file": checklist_file
+        },
+        format="multipart"
+    )
+    assert checklist_upload.status_code == 201
+    assert checklist_upload.json()["data"]["document_category"] == "SITE_PLAN"
+
 # -------------------------------------------------------------------------
 # Test 7: Magic-Byte Inspection & Dangerous File Rejection
 # -------------------------------------------------------------------------

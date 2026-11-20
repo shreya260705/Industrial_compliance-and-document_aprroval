@@ -240,14 +240,28 @@ class ApplicationSubmitView(APIView):
             raise ValidationException(str(err))
 
         db = get_db()
-        dept_officers = list(db.users.find({
-            "role": "DEPARTMENT_OFFICER",
-            "is_active": True,
+        department_scope = {
             "$or": [
                 {"officer_profile.department_code": submitted["department_code"]},
                 {"department_code": submitted["department_code"]}
             ]
-        }))
+        }
+        officer_query = {
+            "role": "DEPARTMENT_OFFICER",
+            "is_active": True,
+            "$and": [department_scope]
+        }
+        state_code = submitted.get("state_code") or submitted.get("jurisdiction_code")
+        if state_code:
+            officer_query["$and"].append({
+                "$or": [
+                    {"officer_profile.jurisdiction_code": state_code},
+                    {"officer_profile.jurisdiction_code": "IN-ALL"},
+                    {"jurisdiction_code": state_code},
+                    {"jurisdiction_code": "IN-ALL"}
+                ]
+            })
+        dept_officers = list(db.users.find(officer_query))
         officer_ids = [o["_id"] for o in dept_officers]
 
         from apps.common.workflow_engine import WorkflowEngine

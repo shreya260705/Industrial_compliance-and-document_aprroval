@@ -489,6 +489,34 @@ def test_07_cross_tenant_vault_document_defense(compliance_setup):
     })
     ob_id = str(boiler_ob["_id"])
 
+    # Same-business evidence for a different facility is also out of scope.
+    other_loc = LocationRepository().create_location(
+        business_id=data["biz_a"]["_id"],
+        location_name="Second Gujarat Compliance Facility",
+        facility_type="MANUFACTURING_PLANT",
+        address={"line1": "Plot 80, GIDC Ankleshwar", "city": "Ankleshwar", "district": "Bharuch", "state_code": "IN-GJ", "pincode": "393002"},
+        jurisdiction_hierarchy={"state_code": "IN-GJ", "district_code": "IN-GJ-BHA", "local_body_code": "GIDC-ANKLESHWAR"},
+        industrial_profile={"nic_code": "2011", "sector_name": "Chemicals", "scale": "MEDIUM", "pollution_category": "RED"}
+    )
+    other_loc_doc = DocumentRepository().create_document(
+        owner_user_id=data["user_a"]["_id"],
+        business_id=data["biz_a"]["_id"],
+        location_id=other_loc["_id"],
+        document_name="Other facility evidence",
+        document_category="ENVIRONMENTAL_CLEARANCE",
+        original_filename="other_facility_evidence.pdf",
+        storage_object_path=f"businesses/{data['biz_a']['_id']}/docs/other_facility_evidence.pdf",
+        mime_type="application/pdf",
+        file_size_bytes=1024,
+        sha256_checksum="b" * 64
+    )
+    location_attack = client_a.post(f"/api/v1/compliance/obligations/{ob_id}/complete", {
+        "completion_remarks": "Evidence from another location",
+        "vault_document_ids": [str(other_loc_doc["_id"])]
+    }, format="json")
+    assert location_attack.status_code == 400
+    assert "location" in location_attack.json()["error"]["message"].lower()
+
     # User A attempts to attach User B's vault document -> Rejected 400
     attack_res = client_a.post(f"/api/v1/compliance/obligations/{ob_id}/complete", {
         "completion_remarks": "Attaching competitor document",
@@ -611,6 +639,21 @@ def test_10_calendar_events_and_metrics_endpoints(compliance_setup):
     assert "completion_percentage" in m
     assert "facilities" in m
     assert len(m["facilities"]) > 0
+    location_id = str(data["loc_a_gj"]["_id"])
+    filtered_metrics = client_a.get(
+        f"/api/v1/compliance/metrics?business_id={data['biz_a']['_id']}&location_id={location_id}"
+    )
+    assert filtered_metrics.status_code == 200
+    assert filtered_metrics.json()["data"]["total_obligations"] == m["total_obligations"]
+    assert all(facility["facility_id"] == location_id for facility in filtered_metrics.json()["data"]["facilities"])
+
+    # Obligation registry pagination metadata must report the real filtered count.
+    list_res = client_a.get(
+        f"/api/v1/compliance/obligations?business_id={data['biz_a']['_id']}&location_id={location_id}&page=1&page_size=1"
+    )
+    assert list_res.status_code == 200
+    assert len(list_res.json()["data"]) == 1
+    assert list_res.json()["meta"]["pagination"]["total_records"] == m["total_obligations"]
 
     # 3. Renewals pipeline
     renew_res = client_a.get("/api/v1/compliance/renewals")
@@ -618,6 +661,29 @@ def test_10_calendar_events_and_metrics_endpoints(compliance_setup):
     renewals = renew_res.json()["data"]
     for r in renewals:
         assert r["renewal_applicability"] is True
+    filtered_renewals = client_a.get(
+        f"/api/v1/compliance/renewals?business_id={data['biz_a']['_id']}&location_id={location_id}"
+    )
+    assert filtered_renewals.status_code == 200
+    assert all(item["location_id"] == location_id for item in filtered_renewals.json()["data"])
+
+    # Custom obligation creation supplies the required API contract fields.
+    custom_res = client_a.post("/api/v1/compliance/obligations", {
+        "business_id": str(data["biz_a"]["_id"]),
+        "location_id": location_id,
+        "title": "Quarterly internal safety review",
+        "description": "Review machine guarding and emergency procedures.",
+        "authority_name": "Internal Enterprise Policy",
+        "department_code": "INTERNAL",
+        "jurisdiction_code": "IN-GJ",
+        "compliance_category": "LABOUR_SAFETY",
+        "frequency": "QUARTERLY",
+        "due_date": (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(),
+        "renewal_applicability": True,
+    }, format="json")
+    assert custom_res.status_code == 201
+    assert custom_res.json()["data"]["location_id"] == location_id
+    assert custom_res.json()["data"]["renewal_applicability"] is True
 
 
 # -----------------------------------------------------------------------------

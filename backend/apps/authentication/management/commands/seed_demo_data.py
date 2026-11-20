@@ -143,7 +143,25 @@ class Command(BaseCommand):
             )
             self.stdout.write(self.style.SUCCESS(f"Created Officer: {gpcb_email}"))
 
-        # 3. Maharashtra Scrutiny Officer
+        # 3. Gujarat Factory & Boilers Scrutiny Officer
+        dish_email = "officer.dish@gujarat.gov.in"
+        if not user_repo.find_by_email(dish_email):
+            user_repo.create_user(
+                email=dish_email,
+                password_hash=default_pass_hash,
+                full_name="Gujarat Factory Safety Officer",
+                phone_number="+919876543213",
+                role="DEPARTMENT_OFFICER",
+                officer_profile={
+                    "department_code": "GJ-DISH",
+                    "jurisdiction_code": "IN-GJ",
+                    "designation": "Factory & Boilers Scrutiny Officer",
+                    "badge_number": "GJ-DISH-001"
+                }
+            )
+            self.stdout.write(self.style.SUCCESS(f"Created Officer: {dish_email}"))
+
+        # 4. Maharashtra Scrutiny Officer
         mpcb_email = "officer.mpcb@maharashtra.gov.in"
         if not user_repo.find_by_email(mpcb_email):
             user_repo.create_user(
@@ -161,7 +179,7 @@ class Command(BaseCommand):
             )
             self.stdout.write(self.style.SUCCESS(f"Created Officer: {mpcb_email}"))
 
-        # 4. Super Admin
+        # 5. Super Admin
         admin_email = "admin@bizpermit.gov.in"
         if not user_repo.find_by_email(admin_email):
             user_repo.create_user(

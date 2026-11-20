@@ -347,6 +347,11 @@ class ApplicationRepository(BaseRepository):
         vault_doc = doc_repo.find_by_id_for_user(vault_document_id, user_id)
         if not vault_doc:
             raise ValueError("Document not found in user's secure vault or access unauthorized.")
+        if str(vault_doc.get("business_id")) != str(existing.get("business_id")):
+            raise ValueError("Application documents must belong to the same business.")
+        document_location_id = vault_doc.get("location_id")
+        if document_location_id and str(document_location_id) != str(existing.get("location_id")):
+            raise ValueError("Location-specific documents must belong to the application location.")
 
         # Check if already attached
         current_attachments = existing.get("attached_documents", [])

@@ -453,10 +453,19 @@ class ComplianceMetricsView(APIView):
 
     def get(self, request):
         business_id = request.query_params.get("business_id")
-        metrics = ob_repo.get_metrics_for_user(request.user.id, business_id=business_id)
+        location_id = request.query_params.get("location_id")
 
         # Facility summary
-        facility_aggs = ob_repo.get_facility_summary_for_user(request.user.id, business_id=business_id)
+        metrics = ob_repo.get_metrics_for_user(
+            request.user.id,
+            business_id=business_id,
+            location_id=location_id
+        )
+        facility_aggs = ob_repo.get_facility_summary_for_user(
+            request.user.id,
+            business_id=business_id,
+            location_id=location_id
+        )
         facilities_list = []
         for agg in facility_aggs:
             loc = loc_repo.find_by_id(agg["_id"])
@@ -481,6 +490,7 @@ class ComplianceRenewalsListView(APIView):
 
     def get(self, request):
         business_id = request.query_params.get("business_id")
+        location_id = request.query_params.get("location_id")
         page = max(1, int(request.query_params.get("page", 1)))
         page_size = min(100, max(1, int(request.query_params.get("page_size", 20))))
         skip = (page - 1) * page_size
@@ -488,6 +498,7 @@ class ComplianceRenewalsListView(APIView):
         renewals = ob_repo.get_renewals_for_user(
             user_id=request.user.id,
             business_id=business_id,
+            location_id=location_id,
             skip=skip,
             limit=page_size
         )

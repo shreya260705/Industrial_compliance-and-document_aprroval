@@ -39,7 +39,7 @@ export const ComplianceRenewalsPage = () => {
     try {
       const params = {};
       if (currentBusiness?.id) params.business_id = currentBusiness.id;
-      if (facilityFilter) params.facility_id = facilityFilter;
+      if (facilityFilter) params.location_id = facilityFilter;
 
       const res = await complianceAPI.getRenewals(params);
       setRenewals(res.data?.data || []);

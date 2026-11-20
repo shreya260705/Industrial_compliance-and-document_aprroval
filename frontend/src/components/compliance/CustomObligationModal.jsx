@@ -27,13 +27,14 @@ export const CustomObligationModal = ({ isOpen, onClose, onCreated }) => {
   const { locations, currentBusiness } = useFacility();
   const [formData, setFormData] = useState({
     title: '',
-    facility_id: '',
+    location_id: '',
     compliance_category: 'ENVIRONMENTAL',
     frequency: 'ANNUAL',
     due_date: '',
     description: '',
     department_code: 'INTERNAL',
-    is_statutory: false,
+    authority_name: 'Internal Enterprise Policy',
+    renewal_applicability: false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -42,27 +43,52 @@ export const CustomObligationModal = ({ isOpen, onClose, onCreated }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.facility_id) {
+    if (!formData.location_id) {
       setError('Please select a business location / facility');
+      return;
+    }
+    if (!currentBusiness?.id) {
+      setError('Select a business before creating an obligation.');
       return;
     }
     if (!formData.due_date) {
       setError('Please select a due date');
       return;
     }
+    if (!formData.description.trim()) {
+      setError('Please provide the obligation scope or instructions.');
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
     try {
-      await complianceAPI.createObligation({
-        ...formData,
+      const location = locations.find((item) => item.id === formData.location_id);
+      if (!location) {
+        setError('The selected business location is no longer available.');
+        return;
+      }
+      const response = await complianceAPI.createObligation({
+        title: formData.title,
+        location_id: formData.location_id,
+        compliance_category: formData.compliance_category,
+        frequency: formData.frequency,
         due_date: new Date(formData.due_date).toISOString(),
+        description: formData.description.trim(),
+        department_code: formData.department_code.trim(),
+        authority_name: formData.authority_name.trim(),
+        jurisdiction_code: location.jurisdiction_hierarchy?.state_code ||
+          location.address?.state_code || 'IN-ALL',
+        renewal_applicability: formData.renewal_applicability,
         business_id: currentBusiness?.id,
       });
+      if (!response.data?.success) {
+        throw new Error(response.data?.error?.message || 'The obligation was not created.');
+      }
       if (onCreated) onCreated();
       onClose();
     } catch (err) {
-      setError(err.response?.data?.error?.message || 'Failed to create custom obligation');
+      setError(err.response?.data?.error?.message || err.message || 'Failed to create custom obligation');
     } finally {
       setSubmitting(false);
     }
@@ -99,8 +125,8 @@ export const CustomObligationModal = ({ isOpen, onClose, onCreated }) => {
               Select Business Location <span className="text-rose-500">*</span>
             </label>
             <select
-              value={formData.facility_id}
-              onChange={(e) => setFormData({ ...formData, facility_id: e.target.value })}
+              value={formData.location_id}
+              onChange={(e) => setFormData({ ...formData, location_id: e.target.value })}
               className="w-full p-2 border border-stone-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-deep-sage"
               required
             >
@@ -184,15 +210,41 @@ export const CustomObligationModal = ({ isOpen, onClose, onCreated }) => {
           </div>
 
           <div>
-            <label className="block font-semibold text-stone-700 mb-1">Scope / Instructions</label>
+            <label className="block font-semibold text-stone-700 mb-1">
+              Authority or Policy Owner <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.authority_name}
+              onChange={(e) => setFormData({ ...formData, authority_name: e.target.value })}
+              className="w-full p-2 border border-stone-300 rounded-lg focus:outline-none"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-stone-700 mb-1">
+              Scope / Instructions <span className="text-rose-500">*</span>
+            </label>
             <textarea
               rows={2}
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Provide compliance parameters, testing standards, or internal protocol..."
               className="w-full p-2 border border-stone-300 rounded-lg focus:outline-none"
+              required
             />
           </div>
+
+          <label className="flex items-center gap-2 text-stone-700">
+            <input
+              type="checkbox"
+              checked={formData.renewal_applicability}
+              onChange={(e) => setFormData({ ...formData, renewal_applicability: e.target.checked })}
+              className="rounded border-stone-300 text-brand-deep-sage"
+            />
+            Track this obligation in the renewals pipeline
+          </label>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-stone-200">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
