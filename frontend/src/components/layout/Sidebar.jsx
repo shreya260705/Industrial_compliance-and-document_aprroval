@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   Building2,
+  MapPin,
   FileCheck,
   Compass,
   FolderArchive,
