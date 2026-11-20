@@ -62,11 +62,6 @@ export const LandingFooter = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/jurisdictions" className="hover:text-brand-sage transition-colors">
-                  36 States & UTs Explorer
-                </Link>
-              </li>
-              <li>
                 <a href="#sectors" className="hover:text-brand-sage transition-colors">
                   Industrial Sectors Grid
                 </a>

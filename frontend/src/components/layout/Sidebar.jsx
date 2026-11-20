@@ -12,7 +12,6 @@ import {
   ClipboardList,
   Layers,
   Landmark,
-  MapPin,
   RotateCcw,
   ShieldCheck,
   Coins,
@@ -200,10 +199,6 @@ export const Sidebar = () => {
                 <NavLink to="/departments" className={getLinkClasses}>
                   <Landmark className="h-4 w-4 shrink-0" />
                   <span>Department Directory</span>
-                </NavLink>
-                <NavLink to="/jurisdictions" className={getLinkClasses}>
-                  <MapPin className="h-4 w-4 shrink-0" />
-                  <span>Territory & Jurisdictions</span>
                 </NavLink>
               </nav>
             </div>

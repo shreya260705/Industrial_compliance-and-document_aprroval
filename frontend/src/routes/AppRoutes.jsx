@@ -22,7 +22,6 @@ const DashboardPage = lazyNamed(() => import('../pages/DashboardPage'), 'Dashboa
 // Phase 2 Discovery
 const ApprovalCataloguePage = lazyNamed(() => import('../pages/ApprovalCataloguePage'), 'ApprovalCataloguePage');
 const DepartmentDirectoryPage = lazyNamed(() => import('../pages/DepartmentDirectoryPage'), 'DepartmentDirectoryPage');
-const JurisdictionExplorerPage = lazyNamed(() => import('../pages/JurisdictionExplorerPage'), 'JurisdictionExplorerPage');
 const KYAEvaluatorPage = lazyNamed(() => import('../pages/KYAEvaluatorPage'), 'KYAEvaluatorPage');
 
 // Phase 3 & 4 Business Owner
@@ -148,7 +147,6 @@ export const AppRoutes = () => {
           {/* Statutory Discovery (Accessible to Business Owners) */}
           <Route path="/catalogue" element={<ApprovalCataloguePage />} />
           <Route path="/departments" element={<DepartmentDirectoryPage />} />
-          <Route path="/jurisdictions" element={<JurisdictionExplorerPage />} />
           <Route path="/kya" element={<KYAEvaluatorPage />} />
           <Route path="/kya-wizard" element={<KYAEvaluatorPage />} />
 
