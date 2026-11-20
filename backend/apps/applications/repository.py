@@ -269,13 +269,24 @@ class ApplicationRepository(BaseRepository):
 
         return self.collection.count_documents(query)
 
-    def get_metrics_for_user(self, user_id: Union[str, ObjectId]) -> Dict[str, int]:
+    def get_metrics_for_user(
+        self,
+        user_id: Union[str, ObjectId],
+        business_id: Optional[Union[str, ObjectId]] = None
+    ) -> Dict[str, int]:
         u_oid = self.to_object_id(user_id)
         if not u_oid:
             return {s.lower(): 0 for s in VALID_STATUSES} | {"total": 0}
 
+        match_filter: Dict[str, Any] = {"owner_user_id": u_oid, "is_active": {"$ne": False}}
+        if business_id:
+            b_oid = self.to_object_id(business_id)
+            if not b_oid:
+                return {s.lower(): 0 for s in VALID_STATUSES} | {"total": 0}
+            match_filter["business_id"] = b_oid
+
         pipeline = [
-            {"$match": {"owner_user_id": u_oid, "is_active": {"$ne": False}}},
+            {"$match": match_filter},
             {"$group": {"_id": "$status", "count": {"$sum": 1}}}
         ]
         results = list(self.collection.aggregate(pipeline))

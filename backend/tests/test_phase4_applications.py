@@ -492,3 +492,30 @@ def test_09_notifications_lifecycle(test_setup):
     read_res = client_a.patch(f"/api/v1/notifications/{first_notif_id}/read")
     assert read_res.status_code == 200
     assert read_res.json()["data"]["is_read"] is True
+
+
+def test_10_application_metrics_can_be_scoped_to_business(test_setup):
+    data = test_setup
+    client_a = get_auth_client(data["user_a"]["email"])
+
+    create_res = client_a.post("/api/v1/applications", {
+        "business_id": str(data["biz_a"]["_id"]),
+        "location_id": str(data["loc_a"]["_id"]),
+        "approval_code": "GPCB-CTE-IND",
+        "applicant_form_data": {}
+    }, format="json")
+    assert create_res.status_code in (200, 201)
+
+    metrics_a = client_a.get(
+        "/api/v1/applications/metrics",
+        {"business_id": str(data["biz_a"]["_id"])}
+    )
+    metrics_b = client_a.get(
+        "/api/v1/applications/metrics",
+        {"business_id": str(data["biz_b"]["_id"])}
+    )
+
+    assert metrics_a.status_code == 200
+    assert metrics_a.json()["data"]["total"] >= 1
+    assert metrics_b.status_code == 200
+    assert metrics_b.json()["data"]["total"] == 0

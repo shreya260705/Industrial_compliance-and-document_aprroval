@@ -169,7 +169,7 @@ export const kyaAPI = {
 
 export const applicationAPI = {
   list: (params = {}) => apiClient.get('/applications', { params }),
-  getMetrics: () => apiClient.get('/applications/metrics'),
+  getMetrics: (params = {}) => apiClient.get('/applications/metrics', { params }),
   create: (data) => apiClient.post('/applications', data),
   get: (id) => apiClient.get(`/applications/${id}`),
   update: (id, data) => apiClient.patch(`/applications/${id}`, data),

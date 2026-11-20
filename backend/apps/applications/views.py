@@ -147,7 +147,10 @@ class ApplicationMetricsView(APIView):
     permission_classes = [IsBusinessOwner]
 
     def get(self, request):
-        metrics = app_repo.get_metrics_for_user(request.user.id)
+        metrics = app_repo.get_metrics_for_user(
+            request.user.id,
+            business_id=request.query_params.get("business_id")
+        )
         return api_success_response(data=metrics, request=request)
 
 
