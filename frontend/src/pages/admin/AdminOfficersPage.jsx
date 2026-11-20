@@ -41,6 +41,7 @@ export const AdminOfficersPage = () => {
     district_code: '',
     designation: '',
     badge_number: '',
+    is_verified: true,
   });
 
   // Transfer / Edit Assignment Modal State
@@ -105,12 +106,29 @@ export const AdminOfficersPage = () => {
         district_code: '',
         designation: '',
         badge_number: '',
+        is_verified: true,
       });
       fetchOfficers();
     } catch (err) {
       setProvisionError(err.response?.data?.error?.message || 'Failed to provision officer account.');
     } finally {
       setProvisionLoading(false);
+    }
+  };
+
+  const handleToggleVerification = async (officer) => {
+    const currentVerified = officer.is_verified ?? true;
+    const newVerified = !currentVerified;
+    const confirmMsg = newVerified
+      ? `Verify scrutiny officer ${officer.full_name}? They will be authorized to log in.`
+      : `Revoke statutory verification for ${officer.full_name}? They will be blocked from logging in.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await adminAPI.updateUserStatus(officer.id, { is_verified: newVerified });
+      fetchOfficers();
+    } catch (err) {
+      alert(err.response?.data?.error?.message || 'Verification status update failed.');
     }
   };
 
@@ -243,20 +261,38 @@ export const AdminOfficersPage = () => {
                         </div>
                       </td>
                       <td className="p-3.5">
-                        <span
-                          className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                            off.is_active
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-rose-50 text-rose-700 border border-rose-200'
-                          }`}
-                        >
-                          {off.is_active ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                          {off.is_active ? 'Active' : 'Suspended'}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              off.is_active
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            }`}
+                          >
+                            {off.is_active ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                            {off.is_active ? 'Active' : 'Suspended'}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              (off.is_verified ?? true)
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}
+                          >
+                            {(off.is_verified ?? true) ? 'Verified' : 'Pending Verification'}
+                          </span>
+                        </div>
                       </td>
-                      <td className="p-3.5 text-right space-x-2">
+                      <td className="p-3.5 text-right space-x-1.5">
                         <Button size="xs" variant="outline" onClick={() => openEditModal(off)}>
                           Transfer / Edit
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant={(off.is_verified ?? true) ? 'outline' : 'primary'}
+                          onClick={() => handleToggleVerification(off)}
+                        >
+                          {(off.is_verified ?? true) ? 'Revoke Verify' : 'Verify'}
                         </Button>
                         <Button
                           size="xs"
@@ -412,6 +448,22 @@ export const AdminOfficersPage = () => {
                     className="w-full p-2 border border-stone-300 rounded focus:ring-2 focus:ring-brand-deep-sage"
                   />
                 </div>
+              </div>
+
+              <div className="p-3 rounded bg-emerald-50/70 border border-emerald-200 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-emerald-900">Official Verification Status</div>
+                  <div className="text-[11px] text-emerald-700">Mark as verified officer (Enables immediate login with provided ID & password)</div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={provisionForm.is_verified}
+                    onChange={(e) => setProvisionForm({ ...provisionForm, is_verified: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
               </div>
 
               <div className="p-3 border-t border-stone-200 bg-stone-50 flex justify-end gap-2 -mx-6 -mb-6 mt-4">

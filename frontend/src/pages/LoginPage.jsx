@@ -162,34 +162,6 @@ export const LoginPage = () => {
                 <button
                   type="button"
                   disabled={isLoading}
-                  onClick={() => setDemoCredentials('officer.gpcb@gujarat.gov.in', 'Password123')}
-                  className="text-left p-2.5 rounded border border-stone-200 bg-brand-cream/30 hover:bg-brand-pale-sage/40 transition-colors text-xs flex items-center justify-between group disabled:opacity-50"
-                >
-                  <div>
-                    <div className="font-semibold text-brand-charcoal">Department Scrutiny Officer (Gujarat)</div>
-                    <div className="text-[10px] text-stone-500 font-mono">officer.gpcb@gujarat.gov.in</div>
-                  </div>
-                  <span className="text-[10px] text-brand-deep-sage font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
-                    1-Click Sign In →
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={() => setDemoCredentials('officer.dish@gujarat.gov.in', 'Password123')}
-                  className="text-left p-2.5 rounded border border-stone-200 bg-brand-cream/30 hover:bg-brand-pale-sage/40 transition-colors text-xs flex items-center justify-between group disabled:opacity-50"
-                >
-                  <div>
-                    <div className="font-semibold text-brand-charcoal">Gujarat Factory & Boilers Officer</div>
-                    <div className="text-[10px] text-stone-500 font-mono">officer.dish@gujarat.gov.in</div>
-                  </div>
-                  <span className="text-[10px] text-brand-deep-sage font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
-                    1-Click Sign In →
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoading}
                   onClick={() => setDemoCredentials('admin@bizpermit.gov.in', 'Password123')}
                   className="text-left p-2.5 rounded border border-stone-200 bg-brand-cream/30 hover:bg-brand-pale-sage/40 transition-colors text-xs flex items-center justify-between group disabled:opacity-50"
                 >
@@ -201,6 +173,10 @@ export const LoginPage = () => {
                     1-Click Sign In →
                   </span>
                 </button>
+              </div>
+              <div className="mt-3 p-2.5 rounded bg-stone-50 border border-stone-200 text-[11px] text-stone-600 flex items-center gap-2">
+                <span className="font-bold text-brand-deep-sage font-mono shrink-0">⚖️ Officer Sign-In:</span>
+                <span>Department Officers can sign in with credentials provisioned and verified by the Super Admin.</span>
               </div>
             </div>
           </CardBody>

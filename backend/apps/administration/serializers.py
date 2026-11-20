@@ -16,6 +16,7 @@ class OfficerCreateSerializer(serializers.Serializer):
     district_code = serializers.CharField(required=False, allow_blank=True, max_length=50)
     designation = serializers.CharField(required=True, max_length=120)
     badge_number = serializers.CharField(required=True, max_length=50)
+    is_verified = serializers.BooleanField(required=False, default=True)
     permitted_approval_categories = serializers.ListField(
         child=serializers.CharField(),
         required=False,
@@ -60,7 +61,8 @@ class OfficerUpdateSerializer(serializers.Serializer):
     )
 
 class UserStatusUpdateSerializer(serializers.Serializer):
-    is_active = serializers.BooleanField(required=True)
+    is_active = serializers.BooleanField(required=False)
+    is_verified = serializers.BooleanField(required=False)
     reason = serializers.CharField(required=False, allow_blank=True, max_length=300)
 
 class JurisdictionCreateSerializer(serializers.Serializer):

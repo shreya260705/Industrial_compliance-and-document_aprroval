@@ -114,6 +114,10 @@ class LoginSerializer(serializers.Serializer):
         if not user.get('is_active', True):
             raise AuthenticationFailedException("This account has been disabled. Please contact support.")
 
+        if user.get('role') == 'DEPARTMENT_OFFICER':
+            if not user.get('is_verified', True) or not user.get('is_email_verified', True):
+                raise AuthenticationFailedException("Officer account is pending verification. Super Admin verification is required before login.")
+
         user_repo.update_last_login(user['_id'])
         tokens = generate_tokens_for_user(user)
 

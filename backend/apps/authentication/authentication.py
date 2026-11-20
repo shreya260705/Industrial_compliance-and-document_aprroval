@@ -73,6 +73,9 @@ class MongoJWTAuthentication(BaseAuthentication):
         if not user_doc.get('is_active', True):
             raise AuthenticationFailedException("User account is inactive or disabled.")
 
+        if user_doc.get('role') == 'DEPARTMENT_OFFICER' and (not user_doc.get('is_verified', True) or not user_doc.get('is_email_verified', True)):
+            raise AuthenticationFailedException("Officer account is pending verification.")
+
         principal = MongoUserPrincipal(user_doc)
         return (principal, token_str)
 

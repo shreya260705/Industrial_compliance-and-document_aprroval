@@ -284,16 +284,21 @@ class AdminUserStatusView(APIView):
 
         serializer = UserStatusUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        new_status = serializer.validated_data["is_active"]
         reason = serializer.validated_data.get("reason", "")
+
+        update_fields = {"updated_at": datetime.now(timezone.utc)}
+        if "is_active" in serializer.validated_data:
+            update_fields["is_active"] = serializer.validated_data["is_active"]
+        if "is_verified" in serializer.validated_data:
+            update_fields["is_verified"] = serializer.validated_data["is_verified"]
+            update_fields["is_email_verified"] = serializer.validated_data["is_verified"]
+            update_fields["is_phone_verified"] = serializer.validated_data["is_verified"]
+        if reason:
+            update_fields["status_reason"] = reason
 
         db.users.update_one(
             {"_id": oid},
-            {"$set": {
-                "is_active": new_status,
-                "updated_at": datetime.now(timezone.utc),
-                "status_reason": reason
-            }}
+            {"$set": update_fields}
         )
 
         log_audit_event(
@@ -302,7 +307,7 @@ class AdminUserStatusView(APIView):
             action="USER_STATUS_UPDATED",
             target_collection="users",
             target_id=str(oid),
-            delta={"previous_status": user.get("is_active"), "new_status": new_status, "reason": reason},
+            delta={"previous_status": user.get("is_active"), "updates": update_fields, "reason": reason},
             ip_address=request.META.get('REMOTE_ADDR'),
             user_agent=request.META.get('HTTP_USER_AGENT')
         )
@@ -444,14 +449,16 @@ class AdminOfficerListCreateView(APIView):
             ])
         }
 
+        is_verified = data.get("is_verified", True)
         officer_doc = {
             "email": normalized_email,
             "password_hash": hashed_pass,
             "full_name": data["full_name"].strip(),
             "role": "DEPARTMENT_OFFICER",
             "officer_profile": officer_profile,
-            "is_email_verified": True,
-            "is_phone_verified": True,
+            "is_email_verified": is_verified,
+            "is_phone_verified": is_verified,
+            "is_verified": is_verified,
             "is_active": True,
             "last_login_at": None,
             "created_at": datetime.now(timezone.utc),
