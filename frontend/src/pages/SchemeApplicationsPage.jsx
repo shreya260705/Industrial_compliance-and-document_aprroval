@@ -14,7 +14,7 @@ import {
   Search,
   ExternalLink
 } from 'lucide-react';
-import { schemeApplicationAPI, businessAPI, schemeAPI } from '../services/api';
+import { schemeApplicationAPI, facilitiesAPI, schemeAPI } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -28,11 +28,11 @@ export const SchemeApplicationsPage = () => {
 
   // New Dossier Modal state
   const [showModal, setShowModal] = useState(false);
-  const [businesses, setBusinesses] = useState([]);
   const [locations, setLocations] = useState([]);
   const [schemes, setSchemes] = useState([]);
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [selectedSchemeCode, setSelectedSchemeCode] = useState('');
+  const [loadingOptions, setLoadingOptions] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
 
@@ -60,28 +60,36 @@ export const SchemeApplicationsPage = () => {
   const openCreateModal = async () => {
     setShowModal(true);
     setCreateError(null);
+    setLocations([]);
+    setSchemes([]);
+    setSelectedLocationId('');
+    setSelectedSchemeCode('');
+    setLoadingOptions(true);
     try {
-      const bizRes = await businessAPI.list();
-      const bizList = bizRes.data?.data?.businesses || [];
-      setBusinesses(bizList);
-
-      const allLocs = [];
-      for (const b of bizList) {
-        const locRes = await businessAPI.listLocations(b.id);
-        const bLocs = locRes.data?.data?.locations || [];
-        bLocs.forEach(loc => {
-          allLocs.push({ ...loc, businessName: b.legal_name });
-        });
-      }
+      const [facilityResponse, schemeResponse] = await Promise.all([
+        facilitiesAPI.list(),
+        schemeAPI.list({ fresh_intake_status: 'OPEN' }),
+      ]);
+      const allLocs = facilityResponse.data?.data || [];
       setLocations(allLocs);
-      if (allLocs.length > 0) setSelectedLocationId(allLocs[0].id);
+      if (allLocs.length > 0) {
+        setSelectedLocationId(allLocs[0].id || allLocs[0]._id);
+      }
 
-      const schemeRes = await schemeAPI.list({ fresh_intake_status: 'OPEN' });
-      const openSchemes = schemeRes.data?.data?.schemes || [];
+      const openSchemes = schemeResponse.data?.data?.schemes || [];
       setSchemes(openSchemes);
       if (openSchemes.length > 0) setSelectedSchemeCode(openSchemes[0].scheme_code);
+
+      if (allLocs.length === 0) {
+        setCreateError('No business locations are available. Register a business location before creating a scheme dossier.');
+      } else if (openSchemes.length === 0) {
+        setCreateError('There are no schemes with open intake available for a new dossier.');
+      }
     } catch (err) {
       console.error('Error preparing modal:', err);
+      setCreateError(err.response?.data?.error?.message || err.message || 'Failed to load business locations and open schemes.');
+    } finally {
+      setLoadingOptions(false);
     }
   };
 
@@ -99,11 +107,14 @@ export const SchemeApplicationsPage = () => {
         scheme_code: selectedSchemeCode
       });
       const appId = res.data?.data?.application?.id;
+      if (!appId) {
+        throw new Error('The server created no application reference. Please try again.');
+      }
       setShowModal(false);
       navigate(`/scheme-applications/${appId}`);
     } catch (err) {
       console.error('Creation error:', err);
-      setCreateError(err.response?.data?.error?.message || 'Failed to create scheme application.');
+      setCreateError(err.response?.data?.error?.message || err.message || 'Failed to create scheme application.');
     } finally {
       setCreating(false);
     }
@@ -284,7 +295,7 @@ export const SchemeApplicationsPage = () => {
             </div>
 
             {createError && (
-              <div className="p-3 rounded bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              <div role="alert" className="p-3 rounded bg-rose-50 border border-rose-200 text-rose-700 text-xs">
                 {createError}
               </div>
             )}
@@ -297,12 +308,16 @@ export const SchemeApplicationsPage = () => {
                 <select
                   value={selectedLocationId}
                   onChange={(e) => setSelectedLocationId(e.target.value)}
+                  disabled={loadingOptions || locations.length === 0}
                   className="w-full border border-stone-200 rounded px-3 py-2 bg-stone-50 text-xs focus:border-brand-deep-sage outline-none"
                   required
                 >
+                  <option value="" disabled>
+                    {loadingOptions ? 'Loading business locations...' : locations.length > 0 ? 'Select a business location' : 'No business locations available'}
+                  </option>
                   {locations.map(loc => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.location_name} ({loc.address?.state_code || 'IN-XX'}) — {loc.businessName}
+                    <option key={loc.id || loc._id} value={loc.id || loc._id}>
+                      {loc.location_name} ({loc.address?.state_code || 'IN-XX'}) — {loc.businessName || loc.business_name}
                     </option>
                   ))}
                 </select>
@@ -315,9 +330,13 @@ export const SchemeApplicationsPage = () => {
                 <select
                   value={selectedSchemeCode}
                   onChange={(e) => setSelectedSchemeCode(e.target.value)}
+                  disabled={loadingOptions || schemes.length === 0}
                   className="w-full border border-stone-200 rounded px-3 py-2 bg-stone-50 text-xs focus:border-brand-deep-sage outline-none"
                   required
                 >
+                  <option value="" disabled>
+                    {loadingOptions ? 'Loading schemes...' : schemes.length > 0 ? 'Select an open scheme' : 'No open schemes available'}
+                  </option>
                   {schemes.map(s => (
                     <option key={s.scheme_code} value={s.scheme_code}>
                       {s.short_name} ({s.scheme_code})
@@ -340,7 +359,7 @@ export const SchemeApplicationsPage = () => {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={creating}
+                  disabled={creating || loadingOptions || !selectedLocationId || !selectedSchemeCode}
                   className="bg-brand-deep-sage hover:bg-brand-deep-sage/90 text-white text-xs px-4"
                 >
                   {creating ? 'Creating...' : 'Create Application Dossier'}

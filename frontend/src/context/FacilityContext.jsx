@@ -11,6 +11,7 @@ export const FacilityProvider = ({ children }) => {
   const [locations, setLocations] = useState([]);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isLoadingFacilities, setIsLoadingFacilities] = useState(false);
+  const [facilityError, setFacilityError] = useState(null);
 
   useEffect(() => {
     if (isAuthenticated && isBusinessOwner) {
@@ -25,26 +26,42 @@ export const FacilityProvider = ({ children }) => {
 
   const loadBusinesses = async () => {
     setIsLoadingFacilities(true);
+    setFacilityError(null);
     try {
       const res = await businessAPI.list();
-      const list = res.data?.data || [];
+      const list = res.data?.data;
+      if (!Array.isArray(list)) {
+        throw new Error('The server returned an invalid business list.');
+      }
       setBusinesses(list);
       if (list.length > 0) {
         const activeBiz = list[0];
         setCurrentBusiness(activeBiz);
         await loadLocations(activeBiz.id);
+      } else {
+        setCurrentBusiness(null);
+        setLocations([]);
+        setCurrentLocation(null);
       }
-    } catch {
-      // Graceful fallback for brand-new users
+    } catch (err) {
+      setBusinesses([]);
+      setCurrentBusiness(null);
+      setLocations([]);
+      setCurrentLocation(null);
+      setFacilityError(err.response?.data?.error?.message || err.message || 'Failed to load businesses.');
     } finally {
       setIsLoadingFacilities(false);
     }
   };
 
   const loadLocations = async (businessId) => {
+    setFacilityError(null);
     try {
       const res = await businessAPI.listLocations(businessId);
-      const locList = res.data?.data || [];
+      const locList = res.data?.data;
+      if (!Array.isArray(locList)) {
+        throw new Error('The server returned an invalid business location list.');
+      }
       setLocations(locList);
       if (locList.length > 0) {
         setCurrentLocation(locList[0]);
@@ -52,17 +69,24 @@ export const FacilityProvider = ({ children }) => {
         setCurrentLocation(null);
       }
       return locList;
-    } catch {
+    } catch (err) {
       setLocations([]);
       setCurrentLocation(null);
+      setFacilityError(err.response?.data?.error?.message || err.message || 'Failed to load business locations.');
       return [];
     }
   };
 
   const selectBusiness = async (biz) => {
+    setFacilityError(null);
     setCurrentBusiness(biz);
     if (biz?.id) {
-      await loadLocations(biz.id);
+      setIsLoadingFacilities(true);
+      try {
+        await loadLocations(biz.id);
+      } finally {
+        setIsLoadingFacilities(false);
+      }
     }
   };
 
@@ -109,6 +133,7 @@ export const FacilityProvider = ({ children }) => {
         currentLocation,
         setCurrentLocation,
         isLoadingFacilities,
+        facilityError,
         refreshFacilities: loadBusinesses,
         refreshLocations: () => currentBusiness && loadLocations(currentBusiness.id),
         createBusiness,

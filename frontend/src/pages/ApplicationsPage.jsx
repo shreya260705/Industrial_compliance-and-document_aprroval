@@ -34,7 +34,7 @@ import { Button } from '../components/ui/Button';
 
 export const ApplicationsPage = () => {
   const { user } = useAuth();
-  const { currentBusiness, currentLocation, locations } = useFacility();
+  const { currentBusiness, currentLocation, locations, isLoadingFacilities, facilityError } = useFacility();
 
   const [applications, setApplications] = useState([]);
   const [metrics, setMetrics] = useState({
@@ -57,6 +57,8 @@ export const ApplicationsPage = () => {
   const [wizardStep, setWizardStep] = useState(1);
   const [wizardFacility, setWizardFacility] = useState(null);
   const [availableApprovals, setAvailableApprovals] = useState([]);
+  const [loadingApprovals, setLoadingApprovals] = useState(false);
+  const [approvalLoadError, setApprovalLoadError] = useState('');
   const [selectedApproval, setSelectedApproval] = useState(null);
   const [activeDraft, setActiveDraft] = useState(null);
   const [userVaultDocs, setUserVaultDocs] = useState([]);
@@ -148,18 +150,30 @@ export const ApplicationsPage = () => {
   };
 
   const loadApprovalsForFacility = async (fac) => {
+    setLoadingApprovals(true);
+    setApprovalLoadError('');
+    setAvailableApprovals([]);
     try {
       // Fetch approvals from catalogue for this state
       const stateCode = fac.jurisdiction_hierarchy?.state_code || fac.address?.state_code || 'IN-GJ';
       const res = await approvalAPI.list({ limit: 50 });
-      if (res.data?.success) {
-        // Prioritize approvals matching this state or Central
-        const all = res.data.data || [];
-        const relevant = all.filter((a) => !a.state_code || a.state_code === stateCode);
-        setAvailableApprovals(relevant.length > 0 ? relevant : all);
+      if (!res.data?.success || !Array.isArray(res.data.data)) {
+        throw new Error(res.data?.error?.message || 'The server returned an invalid statutory clearance list.');
+      }
+
+      // Prioritize approvals matching this state or Central
+      const all = res.data.data;
+      const relevant = all.filter((a) => !a.state_code || a.state_code === stateCode);
+      const approvals = relevant.length > 0 ? relevant : all;
+      setAvailableApprovals(approvals);
+      if (approvals.length === 0) {
+        setApprovalLoadError('No statutory clearances are available in the catalogue for this location.');
       }
     } catch (err) {
       console.error('Failed to load clearance options:', err);
+      setApprovalLoadError(err.response?.data?.error?.message || err.message || 'Failed to load statutory clearances.');
+    } finally {
+      setLoadingApprovals(false);
     }
   };
 
@@ -192,7 +206,7 @@ export const ApplicationsPage = () => {
         setWizardStep(3);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Error initializing draft application.');
+      alert(err.response?.data?.error?.message || err.message || 'Error initializing draft application.');
     } finally {
       setWizardSubmitting(false);
     }
@@ -210,7 +224,7 @@ export const ApplicationsPage = () => {
         setWizardStep(4);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update application form data.');
+      alert(err.response?.data?.error?.message || err.message || 'Failed to update application form data.');
     } finally {
       setWizardSubmitting(false);
     }
@@ -224,7 +238,7 @@ export const ApplicationsPage = () => {
         setActiveDraft(res.data.data);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to attach document.');
+      alert(err.response?.data?.error?.message || err.message || 'Failed to attach document.');
     }
   };
 
@@ -236,7 +250,7 @@ export const ApplicationsPage = () => {
         setActiveDraft(res.data.data);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to remove document attachment.');
+      alert(err.response?.data?.error?.message || err.message || 'Failed to remove document attachment.');
     }
   };
 
@@ -252,7 +266,7 @@ export const ApplicationsPage = () => {
         handleOpenDetail(res.data.data);
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Submission failed.');
+      alert(err.response?.data?.error?.message || err.message || 'Submission failed.');
     } finally {
       setWizardSubmitting(false);
     }
@@ -308,7 +322,7 @@ export const ApplicationsPage = () => {
         loadData();
       }
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to submit clarification response.');
+      alert(err.response?.data?.error?.message || err.message || 'Failed to submit clarification response.');
     } finally {
       setClarificationSubmitting(false);
     }
@@ -320,7 +334,7 @@ export const ApplicationsPage = () => {
       await applicationAPI.delete(appId);
       loadData();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to delete draft.');
+      alert(err.response?.data?.error?.message || err.message || 'Failed to delete draft.');
     }
   };
 
@@ -365,6 +379,7 @@ export const ApplicationsPage = () => {
         <div className="flex items-center gap-2.5">
           <Button
             onClick={handleStartWizard}
+            disabled={isLoadingFacilities}
             className="bg-brand-deep-sage hover:bg-[#283b31] text-white text-xs flex items-center gap-2 shadow-sm"
           >
             <Plus className="h-4 w-4" />
@@ -479,6 +494,7 @@ export const ApplicationsPage = () => {
           </p>
           <Button
             onClick={handleStartWizard}
+            disabled={isLoadingFacilities}
             className="bg-brand-deep-sage text-white text-xs mt-2"
           >
             <Plus className="h-4 w-4 mr-1.5" /> Start New Application Dossier
@@ -669,33 +685,41 @@ export const ApplicationsPage = () => {
                   <p className="text-xs text-stone-600">
                     Select the business establishment or facility premises for which this approval dossier is being prepared:
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {locations.map((fac) => (
-                      <div
-                        key={fac.id}
-                        onClick={() => handleFacilitySelect(fac)}
-                        className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                          wizardFacility?.id === fac.id
-                            ? 'border-brand-deep-sage bg-brand-pale-sage/20 ring-2 ring-brand-deep-sage/20'
-                            : 'border-stone-200 hover:border-brand-sage'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-bold text-brand-charcoal">{fac.location_name}</h4>
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
-                            {fac.industrial_profile?.pollution_category || 'WHITE'}
-                          </span>
+                  {isLoadingFacilities ? (
+                    <p className="text-xs text-stone-500">Loading business locations...</p>
+                  ) : locations.length === 0 ? (
+                    <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+                      {facilityError || 'No business locations are registered yet. Register a location before preparing an application dossier.'}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {locations.map((fac) => (
+                        <div
+                          key={fac.id}
+                          onClick={() => handleFacilitySelect(fac)}
+                          className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                            wizardFacility?.id === fac.id
+                              ? 'border-brand-deep-sage bg-brand-pale-sage/20 ring-2 ring-brand-deep-sage/20'
+                              : 'border-stone-200 hover:border-brand-sage'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-bold text-brand-charcoal">{fac.location_name}</h4>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
+                              {fac.industrial_profile?.pollution_category || 'WHITE'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-stone-500 mt-1">
+                            {fac.address?.city}, {fac.jurisdiction_hierarchy?.state_code || fac.address?.state_code}
+                          </p>
+                          <div className="text-[11px] text-brand-deep-sage font-medium mt-2 flex items-center justify-between">
+                            <span>{fac.facility_type?.replace('_', ' ')}</span>
+                            <span className="flex items-center font-bold">Select <ChevronRight className="h-3 w-3 ml-0.5" /></span>
+                          </div>
                         </div>
-                        <p className="text-xs text-stone-500 mt-1">
-                          {fac.address?.city}, {fac.jurisdiction_hierarchy?.state_code || fac.address?.state_code}
-                        </p>
-                        <div className="text-[11px] text-brand-deep-sage font-medium mt-2 flex items-center justify-between">
-                          <span>{fac.facility_type?.replace('_', ' ')}</span>
-                          <span className="flex items-center font-bold">Select <ChevronRight className="h-3 w-3 ml-0.5" /></span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -714,7 +738,13 @@ export const ApplicationsPage = () => {
                     </button>
                   </div>
                   <div className="space-y-2.5">
-                    {availableApprovals.map((appr) => (
+                    {loadingApprovals ? (
+                      <p className="text-xs text-stone-500">Loading statutory clearances...</p>
+                    ) : approvalLoadError ? (
+                      <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                        {approvalLoadError}
+                      </div>
+                    ) : availableApprovals.map((appr) => (
                       <div
                         key={appr.approval_code}
                         onClick={() => handleApprovalSelect(appr)}

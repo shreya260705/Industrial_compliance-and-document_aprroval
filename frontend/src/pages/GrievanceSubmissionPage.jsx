@@ -66,6 +66,7 @@ export const GrievanceSubmissionPage = () => {
         setVaultDocs(docRes.data?.data?.documents || docRes.data?.data || []);
       } catch (err) {
         console.error('Failed to load form prerequisites:', err);
+        setError(err.response?.data?.error?.message || err.message || 'Failed to load the required form data.');
       }
     };
     loadPrerequisites();

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { loadBusinessLocations } from '../utils/facilityLocations.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
@@ -260,23 +261,13 @@ export const adminSchemeAPI = {
 
 export const facilitiesAPI = {
   list: async () => {
-    try {
-      const res = await businessAPI.list();
-      const businesses = res.data?.data || [];
-      const allLocations = [];
-      for (const b of businesses) {
-        try {
-          const locRes = await businessAPI.listLocations(b.id || b._id);
-          const locs = locRes.data?.data || [];
-          locs.forEach((l) => allLocations.push({ ...l, business_id: b.id || b._id, business_name: b.name }));
-        } catch {
-          // ignore
-        }
-      }
-      return { data: { data: allLocations } };
-    } catch {
-      return { data: { data: [] } };
-    }
+    const businessResponse = await businessAPI.list();
+    const businesses = businessResponse.data?.data;
+    const locations = await loadBusinessLocations(
+      businesses,
+      (businessId) => businessAPI.listLocations(businessId)
+    );
+    return { data: { data: locations } };
   }
 };
 

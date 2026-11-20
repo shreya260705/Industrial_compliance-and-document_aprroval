@@ -37,6 +37,7 @@ export const FacilitiesPage = () => {
     createLocation,
     refreshLocations,
     isLoadingFacilities,
+    facilityError,
   } = useFacility();
 
   const [isBizModalOpen, setIsBizModalOpen] = useState(false);
@@ -47,6 +48,7 @@ export const FacilitiesPage = () => {
   const [districts, setDistricts] = useState([]);
   const [loadingDistricts, setLoadingDistricts] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [evaluationError, setEvaluationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State for New Facility
@@ -201,6 +203,7 @@ export const FacilitiesPage = () => {
 
   const handleEvaluateLocation = async (locationId) => {
     setEvaluatingLocId(locationId);
+    setEvaluationError('');
     try {
       const res = await locationAPI.evaluate(locationId);
       if (res.data?.success) {
@@ -209,9 +212,12 @@ export const FacilitiesPage = () => {
           data: res.data.data,
         });
         refreshLocations();
+      } else {
+        setEvaluationError('The facility evaluation did not return a result.');
       }
     } catch (err) {
       console.error('Failed to evaluate location clearances:', err);
+      setEvaluationError(err.response?.data?.error?.message || err.message || 'Failed to evaluate facility clearances.');
     } finally {
       setEvaluatingLocId(null);
     }
@@ -274,6 +280,18 @@ export const FacilitiesPage = () => {
           </Button>
         </div>
       </div>
+
+      {facilityError && (
+        <div role="alert" className="bg-rose-50 border border-rose-200 p-3 rounded-lg text-xs text-rose-700">
+          {facilityError}
+        </div>
+      )}
+
+      {evaluationError && (
+        <div role="alert" className="bg-rose-50 border border-rose-200 p-3 rounded-lg text-xs text-rose-700">
+          {evaluationError}
+        </div>
+      )}
 
       {/* Facilities Overview Cards / Grid */}
       {locations.length === 0 ? (

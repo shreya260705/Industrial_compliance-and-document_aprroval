@@ -17,7 +17,7 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { schemeAPI, businessAPI, schemeApplicationAPI } from '../services/api';
+import { schemeAPI, facilitiesAPI, schemeApplicationAPI } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -27,7 +27,6 @@ export const SchemeRecommendationsPage = () => {
   const navigate = useNavigate();
   const preselectedScheme = searchParams.get('scheme');
 
-  const [businesses, setBusinesses] = useState([]);
   const [locations, setLocations] = useState([]);
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [loadingLocations, setLoadingLocations] = useState(true);
@@ -44,32 +43,28 @@ export const SchemeRecommendationsPage = () => {
   const [viewHistory, setViewHistory] = useState(false);
   const [historyList, setHistoryList] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
 
   // 1. Fetch businesses & locations
   useEffect(() => {
     const fetchLocations = async () => {
       setLoadingLocations(true);
+      setError(null);
       try {
-        const bizRes = await businessAPI.list();
-        const bizList = bizRes.data?.data?.businesses || [];
-        setBusinesses(bizList);
-
-        const allLocs = [];
-        for (const b of bizList) {
-          const locRes = await businessAPI.listLocations(b.id);
-          const bLocs = locRes.data?.data?.locations || [];
-          bLocs.forEach(loc => {
-            allLocs.push({ ...loc, businessName: b.legal_name });
-          });
-        }
+        const facilityResponse = await facilitiesAPI.list();
+        const allLocs = facilityResponse.data?.data || [];
         setLocations(allLocs);
 
         if (allLocs.length > 0) {
           setSelectedLocationId(allLocs[0].id);
+        } else {
+          setSelectedLocationId('');
         }
       } catch (err) {
         console.error('Error fetching locations:', err);
-        setError('Failed to load your industrial facility locations.');
+        setLocations([]);
+        setSelectedLocationId('');
+        setError(err.response?.data?.error?.message || err.message || 'Failed to load your industrial facility locations.');
       } finally {
         setLoadingLocations(false);
       }
@@ -80,7 +75,13 @@ export const SchemeRecommendationsPage = () => {
 
   // 2. Fetch existing recommendations when location changes
   useEffect(() => {
-    if (!selectedLocationId) return;
+    setViewHistory(false);
+    setHistoryList([]);
+    setHistoryError(null);
+    if (!selectedLocationId) {
+      setRecommendations([]);
+      return;
+    }
 
     const fetchRecs = async () => {
       setLoadingRecs(true);
@@ -93,7 +94,7 @@ export const SchemeRecommendationsPage = () => {
         setRecommendations(res.data?.data?.recommendations || []);
       } catch (err) {
         console.error('Error fetching recommendations:', err);
-        setError('Failed to load recommendations.');
+        setError(err.response?.data?.error?.message || err.message || 'Failed to load recommendations.');
       } finally {
         setLoadingRecs(false);
       }
@@ -129,21 +130,27 @@ export const SchemeRecommendationsPage = () => {
 
   // 4. Fetch history
   const handleToggleHistory = async () => {
-    if (!viewHistory) {
-      setLoadingHistory(true);
-      try {
-        const res = await schemeAPI.getRecommendations({
-          location_id: selectedLocationId,
-          history: true
-        });
-        setHistoryList(res.data?.data?.recommendations || []);
-      } catch (err) {
-        console.error('Error loading history:', err);
-      } finally {
-        setLoadingHistory(false);
-      }
+    if (viewHistory) {
+      setViewHistory(false);
+      return;
     }
-    setViewHistory(!viewHistory);
+    if (!selectedLocationId) return;
+
+    setLoadingHistory(true);
+    setHistoryError(null);
+    try {
+      const res = await schemeAPI.getRecommendations({
+        location_id: selectedLocationId,
+        history: true
+      });
+      setHistoryList(res.data?.data?.recommendations || []);
+      setViewHistory(true);
+    } catch (err) {
+      console.error('Error loading history:', err);
+      setHistoryError(err.response?.data?.error?.message || err.message || 'Failed to load evaluation history.');
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
   // 5. Start Application Dossier
@@ -223,6 +230,7 @@ export const SchemeRecommendationsPage = () => {
           <Button
             variant="outline"
             onClick={handleToggleHistory}
+            disabled={loadingLocations || !selectedLocationId || loadingHistory}
             className="text-xs flex items-center gap-1.5"
           >
             <History className="h-3.5 w-3.5 text-stone-500" />
@@ -285,6 +293,18 @@ export const SchemeRecommendationsPage = () => {
           </div>
         )}
       </div>
+
+      {error && (
+        <div role="alert" className="bg-rose-50 border border-rose-200 p-3 rounded-lg text-xs text-rose-700">
+          {error}
+        </div>
+      )}
+
+      {historyError && (
+        <div role="alert" className="bg-rose-50 border border-rose-200 p-3 rounded-lg text-xs text-rose-700">
+          {historyError}
+        </div>
+      )}
 
       {/* History Drawer / Modal */}
       {viewHistory && (
