@@ -28,21 +28,21 @@ import {
 import { BusinessManagerModal } from '../components/business/BusinessManagerModal';
 
 const STATUTORY_CATEGORIES = [
-  { code: 'IDENTITY_PROOF', label: 'Identity & Signatory Proof' },
-  { code: 'INCORPORATION_PROOF', label: 'Incorporation & MOA / AOA / Deed' },
-  { code: 'LAND_POSSESSION_LEASE', label: 'Land Possession & Lease Deed' },
-  { code: 'SITE_PLAN_LAYOUT', label: 'Factory Site Layout & Architecture' },
-  { code: 'POLLUTION_NOC_CTE_CTO', label: 'Pollution Board NOC (CTE / CTO)' },
-  { code: 'FIRE_SAFETY_NOC', label: 'Fire Safety NOC & Evacuation Plan' },
-  { code: 'FACTORY_LICENSE', label: 'Factory License & Inspector Approval' },
-  { code: 'POWER_SANCTION_LETTER', label: 'Electricity Load Sanction Letter' },
-  { code: 'WATER_SANCTION_LETTER', label: 'Water Supply Sanction Letter' },
-  { code: 'GROUNDWATER_NOC', label: 'Central Ground Water Authority NOC' },
-  { code: 'BOILER_REGISTRATION', label: 'Boiler & Pressure Vessel Certificate' },
-  { code: 'HAZARDOUS_WASTE_AUTHORIZATION', label: 'Hazardous Waste Authorization' },
-  { code: 'EIA_ENVIRONMENTAL_CLEARANCE', label: 'Environmental Clearance (EIA)' },
-  { code: 'PROJECT_REPORT_DPR', label: 'Detailed Project Report (DPR)' },
-  { code: 'OTHER_STATUTORY_RECORD', label: 'Other Statutory Record' },
+  { code: 'IDENTITY_DOCUMENT', label: 'Identity & Signatory Proof' },
+  { code: 'BUSINESS_REGISTRATION', label: 'Incorporation & Business Registration' },
+  { code: 'PAN', label: 'PAN Certificate' },
+  { code: 'GST_CERTIFICATE', label: 'GST Certificate' },
+  { code: 'CIN_CERTIFICATE', label: 'CIN Certificate' },
+  { code: 'UDYAM_CERTIFICATE', label: 'Udyam Registration Certificate' },
+  { code: 'LAND_OWNERSHIP', label: 'Land Ownership Document' },
+  { code: 'LEASE_AGREEMENT', label: 'Lease Agreement' },
+  { code: 'FACTORY_LAYOUT', label: 'Factory Site Layout & Architecture' },
+  { code: 'ENVIRONMENTAL_DOCUMENT', label: 'Environmental Document (CTE / CTO / EIA)' },
+  { code: 'FIRE_SAFETY', label: 'Fire Safety NOC & Evacuation Plan' },
+  { code: 'ELECTRICITY_DOCUMENT', label: 'Electricity Load Sanction Letter' },
+  { code: 'WATER_DOCUMENT', label: 'Water / Groundwater Document' },
+  { code: 'BOILER_DOCUMENT', label: 'Boiler & Pressure Vessel Certificate' },
+  { code: 'OTHER', label: 'Other Statutory Record' },
 ];
 
 export const DocumentVaultPage = () => {
@@ -67,7 +67,7 @@ export const DocumentVaultPage = () => {
   const [uploadProgress, setUploadProgress] = useState(false);
   const [uploadFormData, setUploadFormData] = useState({
     title: '',
-    document_category: 'POLLUTION_NOC_CTE_CTO',
+    document_category: 'ENVIRONMENTAL_DOCUMENT',
     location_id: '',
     document_number: '',
     issuing_authority: '',
@@ -87,7 +87,7 @@ export const DocumentVaultPage = () => {
     setLoading(true);
     try {
       const params = { business_id: currentBusiness.id };
-      if (categoryFilter) params.document_category = categoryFilter;
+      if (categoryFilter) params.category = categoryFilter;
       if (locationFilter) params.location_id = locationFilter;
 
       const res = await documentAPI.list(params);
@@ -164,7 +164,7 @@ export const DocumentVaultPage = () => {
       setSelectedFile(null);
       setUploadFormData({
         title: '',
-        document_category: 'POLLUTION_NOC_CTE_CTO',
+        document_category: 'ENVIRONMENTAL_DOCUMENT',
         location_id: '',
         document_number: '',
         issuing_authority: '',
